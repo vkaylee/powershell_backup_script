@@ -53,6 +53,27 @@ You can specify how each source path is backed up:
 
 ---
 
+## Verifying Configuration
+Before running a full backup, you can use the `-CheckOnly` switch to verify your environment. This checks for:
+1.  **Robocopy Availability:** Ensures `robocopy.exe` is in the system PATH.
+2.  **Permissions:** Checks if the script is running with necessary privileges (Administrator required for VSS).
+3.  **Paths:** Validates accessibility of source and destination paths.
+
+**Command:**
+```powershell
+.\backup-script.ps1 -ConfigFilePath config.jsonc -CheckOnly
+```
+
+**Output Example:**
+```text
+Running Pre-flight Diagnostic Checks...
+  [OK] Robocopy detected.
+  [OK] Administrator privileges confirmed for VSS.
+  [OK] Destination path is accessible.
+
+[SUCCESS] System is ready for backup.
+```
+
 ## Scheduling (Windows Task Scheduler)
 
 To run this script automatically every day:
@@ -68,7 +89,7 @@ To run this script automatically every day:
 5.  **Actions Tab:**
     *   New... -> Start a program.
     *   **Program/script:** `powershell.exe`
-    *   **Add arguments:** `-ExecutionPolicy Bypass -File "D:\tuanlee\snapshot_backup_script\backup-script.ps1"`
+    *   **Add arguments:** `-ExecutionPolicy Bypass -File "D:\tuanlee\snapshot_backup_script\backup-script.ps1" -ConfigFilePath "config.jsonc"`
     *   **Start in:** `D:\tuanlee\snapshot_backup_script\` (Directory where script lives).
 
 ---

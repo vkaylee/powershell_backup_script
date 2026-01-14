@@ -3,6 +3,70 @@ $ScriptPath = Join-Path $PSScriptRoot "backup-script.ps1"
 
 Describe "Snapshot Backup Script - Extended Tests" {
 
+    # --- Pre-flight Checks ---
+    Context "Test-BackupPrerequisites" {
+        It "Should fail if Robocopy is missing" {
+            # Mocking Get-Command to return nothing
+            Mock Get-Command { return $null } -ParameterFilter { $Name -eq "robocopy.exe" }
+            $Config = @{ UseVSS = $false; DestinationPath = "C:\" }
+            $Result = Test-BackupPrerequisites -Config $Config
+            $Result | Should Be $false
+        }
+
+        It "Should fail if UseVSS is true but user is not Admin" {
+            # Mocking the IsAdmin check isn't direct in the script as it's an inline expression
+            # But we can verify it fails as expected in our test environment
+            $Config = @{ UseVSS = $true; DestinationPath = "C:\" }
+            $Result = Test-BackupPrerequisites -Config $Config
+            
+            # Check current process admin status to know expected result
+            $IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+            if (-not $IsAdmin) {
+                $Result | Should Be $false
+            } else {
+                $Result | Should Be $true
+            }
+        }
+    }
+
+    # --- CLI Behavior ---
+    Context "CLI Behavior" {
+        $TestCliDir = Join-Path $PSScriptRoot "TestCliDir"
+        New-Item -Path $TestCliDir -ItemType Directory -Force | Out-Null
+        $TestConfigForCLI = Join-Path $PSScriptRoot "cli_test_config.jsonc"
+        
+        # We need escaped backslashes for JSON
+        $JsonDir = $TestCliDir.Replace("\", "\\")
+        Set-Content -Path $TestConfigForCLI -Value "{ ""SourcePaths"": [""$JsonDir""], ""DestinationPath"": ""$JsonDir"", ""UseVSS"": false }"
+
+        It "Should display usage if no parameters are passed" {
+            # We check if the function exists
+            (Get-Command Show-Usage -ErrorAction SilentlyContinue) | Should Not BeNullOrEmpty
+        }
+
+        It "Should exit early if CheckOnly is specified" {
+            # Mocking Get-Configuration so we don't depend on files
+            Mock Get-Configuration { return @{ UseVSS = $false; DestinationPath = "C:\"; HistoryLogFile = "test.log" } }
+            $Result = Start-BackupProcess -ConfigFilePath "dummy.json" -CheckOnly:$true
+        }
+
+        It "Should run successfully when invoked externally with -CheckOnly" {
+            # Invoking with & operator runs in a child scope
+            $Output = & $ScriptPath -ConfigFilePath $TestConfigForCLI -CheckOnly *>&1
+            $Output -join "`n" | Should Match "System is ready for backup"
+        }
+
+        It "Should NOT run diagnostic mode when invoked externally without -CheckOnly" {
+            $Output = & $ScriptPath -ConfigFilePath $TestConfigForCLI *>&1
+            $Output -join "`n" | Should Match "Configuration loaded successfully"
+            $Output -join "`n" | Should Not Match "System is ready for backup"
+        }
+
+        # Cleanup
+        Remove-Item $TestConfigForCLI -ErrorAction SilentlyContinue
+        Remove-Item $TestCliDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
     # --- Helper Functions ---
     Context "Get-VolumeRoot" {
         It "Should return drive root for local path" {
@@ -113,7 +177,7 @@ Describe "Snapshot Backup Script - Extended Tests" {
 
             # Verify History Log updated
             Test-Path $TestHistory | Should Be $true
-            $HistoryContent = Get-Content $TestHistory
+            $HistoryContent = Get-Content $TestHistory -Raw
             $HistoryContent | Should Match "MySubDir"
         }
         

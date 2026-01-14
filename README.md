@@ -7,6 +7,7 @@ A robust, enterprise-grade PowerShell script for performing daily snapshot backu
 - **VSS Snapshot Integration:** Creates a consistent "point-in-time" snapshot of the source volume before copying, ensuring no file locking issues (requires Administrator privileges).
 - **Efficient File Copy:** Uses `Robocopy` for multi-threaded, resume-supported file transfers.
 - **Configurable Throttling:** Built-in support for Robocopy's `/IPG` (Inter-Packet Gap) to prevent network/server overload.
+- **Pre-flight Diagnostics:** Auto-detects missing tools or permissions and aborts to prevent failures. Use `-CheckOnly` to verify environment readiness.
 - **Timestamped Backups:** Creates isolated backup folders for each run (e.g., `ProjectA_20260114_080000`).
 - **Automated Retention:** Automatically deletes backups and logs older than X days (configurable).
 - **Self-Documenting Configuration:** Supports **C-style comments** (`//` and `/* */`) in the `config.jsonc` file for better documentation.
@@ -36,7 +37,7 @@ A robust, enterprise-grade PowerShell script for performing daily snapshot backu
 2.  **Run:**
     Open PowerShell as **Administrator** and execute:
     ```powershell
-    .\backup-script.ps1
+    .\backup-script.ps1 -ConfigFilePath config.jsonc
     ```
 
 ## 📂 Documentation

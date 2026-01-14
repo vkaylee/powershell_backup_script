@@ -19,7 +19,10 @@
     - Restoration facilitated by self-contained, timestamped backup folders and a detailed history log.
 
 .PARAMETER ConfigFilePath
-    Path to the JSON configuration file. Defaults to 'config.json' in the script directory.
+    Path to the JSON configuration file. Defaults to 'config.jsonc' in the script directory.
+
+.PARAMETER CheckOnly
+    If specified, runs only the pre-flight diagnostic checks and exits. Useful for verifying environment readiness.
 
 .EXAMPLE
     .\backup-script.ps1
@@ -37,20 +40,20 @@
 
 Param (
     [Parameter(Mandatory=$false)]
-    [string]$ConfigFilePath = "config.jsonc"
+    [string]$ConfigFilePath,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$CheckOnly
 )
 
 #region Global Variables and Constants
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 # Resolve absolute path for config file if it's relative
-if (-not (Test-Path $ConfigFilePath -PathType Leaf)) {
+if ($ConfigFilePath -and -not (Test-Path $ConfigFilePath -PathType Leaf)) {
     # Check if it exists relative to script dir
     $PotentialPath = Join-Path $ScriptDir $ConfigFilePath
     if (Test-Path $PotentialPath -PathType Leaf) {
         $ConfigFilePath = $PotentialPath
-    } elseif ($ConfigFilePath -eq "config.jsonc" -and (Test-Path (Join-Path $ScriptDir "config.json"))) {
-        # Fallback to config.json if jsonc is default but only json exists
-        $ConfigFilePath = Join-Path $ScriptDir "config.json"
     }
 }
 $LogsDir = Join-Path $ScriptDir "logs"
@@ -59,6 +62,76 @@ $HistoryLogFilePath = $null # Will be set after config is loaded
 #endregion Global Variables and Constants
 
 #region Functions - Configuration Management
+
+Function Show-Usage {
+    Write-Host @"
+============================================================
+Snapshot Backup Script - Usage Guide
+============================================================
+This script performs consistent backups using VSS and Robocopy.
+
+PARAMETERS:
+  -ConfigFilePath <path>  [REQUIRED] Path to the JSONC configuration file.
+  
+  -CheckOnly              Runs only pre-flight diagnostic checks.
+                          Does NOT perform any backup operations.
+                          (Also requires -ConfigFilePath to validate config)
+
+EXAMPLES:
+  1. Run diagnostic check:
+     .\backup-script.ps1 -ConfigFilePath config.jsonc -CheckOnly
+
+  2. Run backup:
+     .\backup-script.ps1 -ConfigFilePath config.jsonc
+
+NOTES:
+  - Requires Administrator privileges for VSS snapshots.
+  - Supports .jsonc (JSON with comments) for configuration.
+
+For full documentation, see: .\docs\user-guide.md
+============================================================
+"@ -ForegroundColor Cyan
+}
+
+Function Test-BackupPrerequisites {
+    [CmdletBinding()]
+    Param (
+        [Parameter(Mandatory=$true)]
+        [object]$Config
+    )
+
+    $Passed = $true
+    Write-Host "Running Pre-flight Diagnostic Checks..." -ForegroundColor Cyan
+
+    # 1. Check for Robocopy
+    if (-not (Get-Command "robocopy.exe" -ErrorAction SilentlyContinue)) {
+        Write-Error "CRITICAL: 'robocopy.exe' was not found in the system PATH. This tool is required for backup operations."
+        $Passed = $false
+    } else {
+        Write-Host "  [OK] Robocopy detected." -ForegroundColor Green
+    }
+
+    # 2. Check for Administrator Privileges (Required for VSS)
+    $IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    
+    if ($Config.UseVSS -and -not $IsAdmin) {
+        Write-Error "CRITICAL: Administrator privileges are required when 'UseVSS' is enabled. Please run PowerShell as Administrator."
+        $Passed = $false
+    } elseif ($Config.UseVSS) {
+        Write-Host "  [OK] Administrator privileges confirmed for VSS." -ForegroundColor Green
+    } else {
+        Write-Host "  [SKIP] VSS is disabled; skipping Administrator check." -ForegroundColor Gray
+    }
+
+    # 3. Basic Path Validation
+    if (-not (Test-Path $Config.DestinationPath)) {
+        Write-Warning "DestinationPath '$($Config.DestinationPath)' is currently inaccessible. The script will attempt to create it later, but please verify permissions."
+    } else {
+        Write-Host "  [OK] Destination path is accessible." -ForegroundColor Green
+    }
+
+    return $Passed
+}
 
 Function Get-Configuration {
     [CmdletBinding()]
@@ -395,11 +468,12 @@ Function Execute-BackupItem {
 
 Function Start-BackupProcess {
     Param (
-        [string]$ConfigFilePath
+        [string]$ConfigFilePath,
+        [switch]$CheckOnly
     )
 
     try {
-        # Ensure logs directory exists
+        # Ensure logs directory exists (skip if CheckOnly, we might not need it yet, but good to check permissions)
         if (-not (Test-Path $LogsDir -PathType Container)) {
             Write-Host "Creating logs directory: $LogsDir" -ForegroundColor Yellow
             New-Item -Path $LogsDir -ItemType Directory -Force | Out-Null
@@ -407,6 +481,23 @@ Function Start-BackupProcess {
 
         $Config = Get-Configuration -ConfigPath $ConfigFilePath
         $HistoryLogFilePath = Join-Path $ScriptDir $Config.HistoryLogFile
+
+        # --- Pre-flight Checks ---
+        $CheckResult = Test-BackupPrerequisites -Config $Config
+        
+        if ($CheckOnly) {
+            if ($CheckResult) {
+                Write-Host "`n[SUCCESS] System is ready for backup." -ForegroundColor Green
+            } else {
+                Write-Host "`n[FAILED] System is NOT ready for backup. Please fix the errors above." -ForegroundColor Red
+            }
+            return # Exit successfully (diagnostic mode)
+        }
+
+        if (-not $CheckResult) {
+            Write-Error "Pre-flight checks failed. Aborting backup process to prevent inconsistent data."
+            return # Exit function
+        }
 
         if (-not (Test-Path $HistoryLogFilePath -PathType Leaf)) {
             Write-Host "Creating history log file: $HistoryLogFilePath" -ForegroundColor Yellow
@@ -506,7 +597,12 @@ Function Start-BackupProcess {
 
 # Only execute if script is run directly (not dot-sourced)
 if ($MyInvocation.InvocationName -ne '.') {
-    Start-BackupProcess -ConfigFilePath $ConfigFilePath
+    if ([string]::IsNullOrWhiteSpace($ConfigFilePath)) {
+        Show-Usage
+        exit 1 # Exit with error code if required arg is missing
+    }
+    
+    Start-BackupProcess -ConfigFilePath $ConfigFilePath -CheckOnly:$CheckOnly
 }
 
 #endregion Main Script Execution

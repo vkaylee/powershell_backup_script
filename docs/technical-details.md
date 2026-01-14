@@ -9,7 +9,11 @@ The script has been refactored into modular functions to improve maintainability
 1.  **Configuration Management (`Get-Configuration`):**
     *   Loads `config.jsonc` (default).
     *   **JSONC Support:** Uses Regex to strip single-line (`//`) and multi-line (`/* */`) comments before parsing with `ConvertFrom-Json`.
-2.  **VSS Management:**
+2.  **Pre-flight Diagnostic Check (`Test-BackupPrerequisites`):**
+    *   Validates system readiness before attempting any operations.
+    *   Checks for `robocopy.exe`, Administrator privileges (if VSS enabled), and basic path accessibility.
+    *   **Fail-safe:** If critical checks fail, the script terminates immediately to prevent inconsistent backups.
+3.  **VSS Management:**
     *   `New-ShadowCopy`: Uses WMI `Win32_ShadowCopy` to create a point-in-time volume snapshot.
     *   `Remove-ShadowCopy`: Ensures cleanup of snapshots after use.
 3.  **Backup Item Discovery (`Get-BackupItems`):**
