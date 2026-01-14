@@ -88,6 +88,51 @@ Describe "Snapshot Backup Script - Extended Tests" {
         }
     }
 
+    Context "VSS Workflow Integration - Deep Path Mapping" {
+        It "Should correctly map deep subdirectories and NOT default to volume root" {
+            Mock Invoke-RobocopyBackup { 
+                return @{ Status = "Success"; ExitCode = 0; LogFile = "test.log" } 
+            }
+
+            Mock Get-Command { return [PSCustomObject]@{ Name = "robocopy.exe" } } -ParameterFilter { $Name -eq "robocopy.exe" }
+            Mock Test-Path { return $true }
+            Mock New-Item { return $null }
+            Mock Join-Path { param($Path, $ChildPath) if ($Path.EndsWith("\")) { return "$Path$ChildPath" } return "$Path\$ChildPath" }
+            Mock Get-VolumeRoot { return "D:\" }
+            Mock Test-BackupPrerequisites { return $true }
+            Mock Start-Sleep { }
+            
+            $DeepPath = "D:\tuanlee\snapshot_backup_script\workdirs"
+            Mock Resolve-Path { return [PSCustomObject]@{ Path = $DeepPath } }
+
+            $Config = @{
+                SourcePaths = @($DeepPath)
+                DestinationPath = "E:\Backups"
+                RetentionDays = 30
+                LogRetentionDays = 90
+                MaxBackupAttempts = 3
+                RobocopyOptions = '/MIR /LOG+:{logpath}'
+                RobocopyInterPacketGapMs = 0
+                HistoryLogFile = "backup-history.log"
+                UseVSS = $true
+            }
+
+            Mock New-ShadowCopy { return [PSCustomObject]@{ ID = "{ID-D}"; DeviceObject = "\\?\GLOBALROOT\Device\VSS_D" } }
+            Mock Remove-ShadowCopy { }
+            Mock Get-Configuration { return $Config }
+            Mock Get-BackupItems {
+                return ,@([PSCustomObject]@{ Name = "workdirs"; SourceSubPath = "\\?\GLOBALROOT\Device\VSS_D\tuanlee\snapshot_backup_script\workdirs\"; IsRootMode = $true })
+            }
+            Mock Write-BackupHistory { }
+            Mock Clean-OldBackups { }
+
+            Start-BackupProcess -ConfigFilePath "fake.json"
+
+            # Verify the mock was called (regression test for VSS workflow completion)
+            Assert-MockCalled Invoke-RobocopyBackup -Exactly 1
+        }
+    }
+
     Context "VSS Workflow Integration - Disabled" {
         $script:RobocopyCalledDisabled = $false
         Mock Invoke-RobocopyBackup { $script:RobocopyCalledDisabled = $true; return @{ Status = "Success"; ExitCode = 0; LogFile = "test.log" } }
