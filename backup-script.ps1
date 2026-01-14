@@ -148,7 +148,7 @@ Function Get-Configuration {
         RetentionDays = 30
         LogRetentionDays = 90
         MaxBackupAttempts = 3
-        RobocopyOptions = '/MIR /MT:16 /R:2 /W:5 /J /XD RECYCLE.BIN "System Volume Information" /XF Thumbs.db /NP /LOG+:{logpath}'
+        RobocopyOptions = '/MIR /MT:8 /R:1 /W:1 /J /XD RECYCLE.BIN "System Volume Information" /XF Thumbs.db /NP /LOG+:{logpath}'
         RobocopyInterPacketGapMs = 0
         HistoryLogFile = "backup-history.log"
         UseVSS = $true
@@ -292,64 +292,48 @@ Function Invoke-RobocopyBackup {
         New-Item -Path $LogDir -ItemType Directory -Force | Out-Null
     }
 
-    # Build Argument List robustly
-    # We start with Source and Destination
+    # 2. Build Argument List
     if ([string]::IsNullOrWhiteSpace($Source) -or [string]::IsNullOrWhiteSpace($Destination)) {
         Write-Error "CRITICAL: Robocopy invoked with missing Source or Destination path."
         return @{ Status = "Failed"; ExitCode = 16; LogFile = $LogFile }
     }
-    $ArgumentList = @($Source, $Destination)
 
-    # 3. Parse Options string into arguments, but handle the {logpath} placeholder specially
-    # First, replace the placeholder with the actual log path
-    $ProcessedOptions = $Options.Replace("{logpath}", $LogFile)
-    
-    # Simple regex-based splitter that respects quotes would be ideal, 
-    # but since we control the templates, we'll use a safer approach:
-    # Split by space but filter out empty results.
-    $OptionParts = $ProcessedOptions -split ' (?=(?:[^"]*"[^"]*")*[^"]*$)' | Where-Object { [string]::IsNullOrWhiteSpace($_) -eq $false }
-    
-    foreach ($Part in $OptionParts) {
-        # Remove surrounding quotes if they were added in the template (we'll let Start-Process handle quoting)
-        $CleanPart = $Part.Trim('"')
-        $ArgumentList += $CleanPart
-    }
-    
-    if ($InterPacketGapMs -gt 0) {
-        $ArgumentList += "/IPG:$InterPacketGapMs"
-    }
+    # Robocopy is extremely sensitive to trailing slashes in quoted strings.
+    # We remove them to prevent escaping the closing quote.
+    $SourceArg = $Source.TrimEnd('\')
+    $DestArg = $Destination.TrimEnd('\')
 
+    # 3. Process Options
+    # Remove any manual LOG switch to prevent conflict
+    $CleanOptions = $Options -replace '/LOG\+?:\S+', '' -replace '\{logpath\}', ''
+    
+    # Split options into an array, respecting quotes
+    $OptionArray = [regex]::Matches($CleanOptions, '(?:[^\s"]+|"[^"]*")+') | ForEach-Object { $_.Value.Trim('"') }
+
+    # 4. Execute using Call Operator (&)
     Write-Host "Executing Robocopy..." -ForegroundColor Cyan
-    Write-Host "Source: $Source" -ForegroundColor DarkGray
-    Write-Host "Dest:   $Destination" -ForegroundColor DarkGray
-    Write-Host "Log:    $LogFile" -ForegroundColor DarkGray
+    Write-Host "Source: $SourceArg" -ForegroundColor DarkGray
+    Write-Host "Dest:   $DestArg" -ForegroundColor DarkGray
 
-    # Execute Robocopy
-    # Passing ArgumentList as an array is the most reliable way to handle spaces in PowerShell
-    $Process = Start-Process -FilePath "robocopy.exe" -ArgumentList $ArgumentList -Wait -NoNewWindow -PassThru
+    # Construct the final argument list carefully for Win32 compatibility
+    $RobocopyParams = @($SourceArg, $DestArg)
+    foreach ($Opt in $OptionArray) { if ($Opt) { $RobocopyParams += $Opt } }
+    $RobocopyParams += "/LOG+:$LogFile"
+    if ($InterPacketGapMs -gt 0) { $RobocopyParams += "/IPG:$InterPacketGapMs" }
+
+    # Execute
+    $LASTEXITCODE = 0
+    & robocopy.exe $RobocopyParams
+    $ExitCode = $LASTEXITCODE
     
-    $ExitCode = $Process.ExitCode
     $Status = "Unknown"
-    
+    # Success codes are < 8
     if ($ExitCode -lt 8) {
         $Status = "Success"
         Write-Host "Robocopy finished successfully (Code $ExitCode)." -ForegroundColor Green
     } else {
         $Status = "Failed"
         Write-Error "Robocopy failed with exit code $ExitCode."
-    }
-
-    # Parse log file for stats (simplified)
-    $TotalFiles = 0
-    $CopiedFiles = 0
-    $TotalBytes = 0
-    $CopiedBytes = 0
-    
-    if (Test-Path $LogFile) {
-        $LogContent = Get-Content $LogFile
-        # Regex to find the summary table: "   Files :      123         0 ..."
-        # This is a bit brittle, fallback to 0 if parsing fails
-        # A more robust way is parsing the footer lines
     }
 
     return @{
@@ -389,7 +373,7 @@ Function Clean-OldBackups {
     
     if (Test-Path $DestinationRoot) {
         Get-ChildItem -Path $DestinationRoot -Directory -Recurse | Where-Object {
-            $_.Name -match "_\d{8}_\d{6}$"
+            $_.Name -match "_\d{8}_\d{6}(_\d{3})?$"
         } | ForEach-Object {
             if ($_.CreationTime -lt $CutoffDate) {
                 Write-Host "Deleting old backup: $($_.FullName)" -ForegroundColor Yellow
@@ -439,7 +423,7 @@ Function Get-BackupItems {
             }
         }
     }
-    return ,$ItemsToBackup
+    return $ItemsToBackup
 }
 
 Function Execute-BackupItem {
@@ -456,8 +440,9 @@ Function Execute-BackupItem {
     )
 
     $SubDirName = $Item.Name
-    $SourceSubDirPath = $Item.SourceSubPath
-    $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $SourceSubPath = $Item.SourceSubPath
+    # Use high-precision timestamp to ensure unique folders for rapidly succeeding items
+    $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss_fff"
     $SourceFolderName = Split-Path $SourcePath -Leaf
     
     $TargetParentDir = Join-Path $DestinationRoot $SourceFolderName
@@ -581,7 +566,7 @@ Function Start-BackupProcess {
             if ($Config.UseVSS) {
                 try {
                     $Snapshot = New-ShadowCopy -VolumeRoot $VolumeRoot
-                    # Small delay to ensure the device object is ready for access
+                    # Wait for device object stability
                     Start-Sleep -Seconds 2
                 } catch {
                     Write-Error "Skipping $SourcePath due to VSS creation failure."
@@ -589,12 +574,12 @@ Function Start-BackupProcess {
                 }
 
                 if ($Snapshot) {
-                    $ShadowDevicePath = $Snapshot.DeviceObject.TrimEnd('\')
-                    # Construct VSS path for the source directory. 
+                    $ShadowDevicePath = $Snapshot.DeviceObject
+                    # Construct VSS path. Use exact DeviceObject returned by WMI.
                     if ([string]::IsNullOrWhiteSpace($RelativePath)) {
-                        $VssSourceRoot = "$ShadowDevicePath\"
+                        $VssSourceRoot = $ShadowDevicePath.TrimEnd('\') + "\"
                     } else {
-                        $VssSourceRoot = "$ShadowDevicePath\$RelativePath"
+                        $VssSourceRoot = $ShadowDevicePath.TrimEnd('\') + "\" + $RelativePath.TrimStart('\')
                     }
                 }
             } else {
