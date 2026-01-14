@@ -50,10 +50,22 @@ Describe "Snapshot Backup Script - Extended Tests" {
             $Result = Start-BackupProcess -ConfigFilePath "dummy.json" -CheckOnly:$true
         }
 
-        It "Should run successfully when invoked externally with -CheckOnly" {
+        It "Should report failure in -CheckOnly mode if prerequisites fail" {
+            Mock Get-Configuration { return @{ UseVSS = $false; DestinationPath = "C:\"; HistoryLogFile = "test.log" } }
+            # Mock Test-BackupPrerequisites to return false
+            Mock Test-BackupPrerequisites { return $false }
+            
+            $Output = Start-BackupProcess -ConfigFilePath "dummy.json" -CheckOnly:$true *>&1
+            $Output -join "`n" | Should Match "\[FAILED\] System is NOT ready for backup"
+        }
+
+        It "Should execute diagnostic checks and report success when -CheckOnly is specified" {
             # Invoking with & operator runs in a child scope
             $Output = & $ScriptPath -ConfigFilePath $TestConfigForCLI -CheckOnly *>&1
-            $Output -join "`n" | Should Match "System is ready for backup"
+            $JoinedOutput = $Output -join "`n"
+            $JoinedOutput | Should Match "Running Pre-flight Diagnostic Checks..."
+            $JoinedOutput | Should Match "\[OK\] Robocopy detected"
+            $JoinedOutput | Should Match "\[SUCCESS\] System is ready for backup"
         }
 
         It "Should NOT run diagnostic mode when invoked externally without -CheckOnly" {
