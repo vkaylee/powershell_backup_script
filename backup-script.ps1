@@ -148,7 +148,7 @@ Function Get-Configuration {
         RetentionDays = 30
         LogRetentionDays = 90
         MaxBackupAttempts = 3
-        RobocopyOptions = '/MIR /XD RECYCLE.BIN "System Volume Information" /XF Thumbs.db /R:5 /W:10 /NP /LOG+:{logpath}'
+        RobocopyOptions = '/MIR /MT:16 /R:2 /W:5 /J /XD RECYCLE.BIN "System Volume Information" /XF Thumbs.db /NP /LOG+:{logpath}'
         RobocopyInterPacketGapMs = 0
         HistoryLogFile = "backup-history.log"
         UseVSS = $true

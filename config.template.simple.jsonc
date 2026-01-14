@@ -26,10 +26,12 @@
 
   // Standard Robocopy options:
   // /MIR : Mirror (copy new/changed, delete extra in dest)
+  // /MT:16 : Multi-threaded copy (16 threads)
+  // /J   : Unbuffered I/O (faster for large files)
   // /XD  : Exclude Directories
   // /XF  : Exclude Files
-  // /R:5 /W:10 : Retry 5 times, wait 10s between retries
-  "RobocopyOptions": "/MIR /XD RECYCLE.BIN \"System Volume Information\" /XF Thumbs.db /R:5 /W:10 /NP /LOG+{logpath}",
+  // /R:2 /W:5 : Retry 2 times, wait 5s between retries
+  "RobocopyOptions": "/MIR /MT:16 /R:2 /W:5 /J /XD RECYCLE.BIN \"System Volume Information\" /XF Thumbs.db /NP /LOG+{logpath}",
 
   // Slow down the copy to save bandwidth (0 = full speed).
   "RobocopyInterPacketGapMs": 0,

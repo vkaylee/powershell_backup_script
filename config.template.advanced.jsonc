@@ -34,6 +34,8 @@
   /* 
      ROBOCOPY OPTIONS EXPLAINED:
      /MIR  :: Mirror directory tree (equivalent to /E plus /PURGE).
+     /MT:n :: Multi-threaded copy (default 8, max 128). Essential for small files.
+     /J    :: Unbuffered I/O (raw copy, bypasses OS cache for large files).
      /XD   :: Exclude Directories matching given names/paths.
      /XF   :: Exclude Files matching given names/paths.
      /R:n  :: Number of Retries on failed copies.
@@ -41,12 +43,11 @@
      /NP   :: No Progress - prevents log clutter.
      /LOG+ :: Appends output to the log file defined by script.
   */
-  "RobocopyOptions": "/MIR /XD RECYCLE.BIN \"System Volume Information\" /XF Thumbs.db /R:5 /W:10 /NP /LOG+{logpath}",
+  "RobocopyOptions": "/MIR /MT:16 /R:2 /W:5 /J /XD RECYCLE.BIN \"System Volume Information\" /XF Thumbs.db /NP /LOG+{logpath}",
 
   // Inter-Packet Gap (IPG) in milliseconds.
-  // Use this to throttle bandwidth usage on slow links.
-  // 20ms implies roughly 50-60% bandwidth utilization depending on latency.
-  "RobocopyInterPacketGapMs": 20,
+  // Use this to throttle bandwidth usage on slow links. 0 = Full Speed.
+  "RobocopyInterPacketGapMs": 0,
 
   "HistoryLogFile": "backup-history.log"
 }
