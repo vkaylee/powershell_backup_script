@@ -31,7 +31,17 @@ The script has been refactored into modular functions to improve maintainability
     *   `Clean-OldBackups`: Enforces retention policies for both data and logs. Supports regex-based identification of high-precision timestamp folders.
 
 ## VSS Snapshot Logic
-...
+The script uses the following workflow to ensure data consistency:
+1.  Identify the volume root (e.g., `D:\`) for the given source path.
+2.  Create a VSS Snapshot using WMI (`Win32_ShadowCopy`).
+3.  **Junction Mapping:** To avoid Robocopy Error 123/53 (common with `\\?\GLOBALROOT` paths), the script creates a temporary Directory Junction (`mklink /j`) pointing to the snapshot's `DeviceObject`.
+4.  Translate the source path to use the junction (e.g., `D:\VssJunction_{ID}\path\to\data`).
+5.  Execute backup.
+6.  **Cleanup:** Remove the junction (`rd /q`) and delete the VSS snapshot.
+
+### VSS Junction Strategy
+Directory Junctions are used because they are handled at the filesystem level and are fully compatible with standard Win32 tools like Robocopy and `cmd.exe`, whereas direct device namespace paths are often rejected by these tools.
+
 ## Robocopy Integration
 ...
 

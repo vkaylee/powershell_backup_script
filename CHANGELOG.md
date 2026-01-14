@@ -11,8 +11,9 @@ All notable changes to this project will be documented in this file.
 - **Default Config Rename:** Default configuration file renamed to `config.jsonc` for better VS Code compatibility.
 - **Granular Backup Modes:** Added `Root` mode (backup folder as one unit) vs `SubDirectories` mode (backup each subfolder).
 - **Configuration Templates:** Added `config.template.simple.json` and `config.template.advanced.json` with documentation.
-- **Enhanced Testing:** Expanded Pester test suite to 24 tests covering logic, config, and cleanup.
-- **VSS Integration Testing:** Implemented comprehensive mocks for VSS snapshots, ensuring path translation and lifecycle management (creation/deletion) are verified in CI/CD without requiring administrative privileges.
+- **Enhanced Testing:** Expanded Pester test suite to 25 tests covering logic, config, and junction workflows.
+- **VSS Junction Mapping:** Implemented automatic directory junction creation (`mklink /j`) for VSS snapshots. This resolves persistent "Syntax Incorrect" (Error 123) and "Path Not Found" (Error 53) issues in Robocopy by providing a standard local path to the snapshot data.
+- **VSS Integration Testing:** Implemented comprehensive mocks for VSS snapshots and junctions, ensuring lifecycle management is verified in CI/CD.
 - **Project-Standard Test Paths:** Tests now use project-standard drive letters (`D:`, `E:`) and mock the filesystem to ensure compatibility across different environments.
 - **High-Precision Timestamps:** Switched to millisecond-precision timestamps (`yyyyMMdd_HHmmss_fff`) for backup folders to prevent data corruption/purging during rapid subfolder backups under `/MIR`.
 - **Reliability Fixes:** Resolved Robocopy Error 16 (parameter parsing), Error 53 (path not found), and Error 123 (invalid syntax) by refactoring argument passing, ensuring mandatory `\\?\` prefixes, and normalizing trailing slashes.

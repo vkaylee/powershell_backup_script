@@ -38,6 +38,7 @@ Describe "Snapshot Backup Script - Extended Tests" {
             Mock New-Item { return $null }
             Mock Join-Path { 
                 param($Path, $ChildPath)
+                if ([string]::IsNullOrWhiteSpace($Path)) { return $ChildPath }
                 if ($Path.EndsWith("\")) { return "$Path$ChildPath" }
                 return "$Path\$ChildPath"
             }
@@ -68,6 +69,7 @@ Describe "Snapshot Backup Script - Extended Tests" {
             }
             Mock Remove-ShadowCopy { }
             Mock Get-Configuration { return $Config }
+            Mock cmd.exe { }
             Mock Write-BackupHistory { }
             Mock Clean-OldBackups { }
             
@@ -97,7 +99,12 @@ Describe "Snapshot Backup Script - Extended Tests" {
             Mock Get-Command { return [PSCustomObject]@{ Name = "robocopy.exe" } } -ParameterFilter { $Name -eq "robocopy.exe" }
             Mock Test-Path { return $true }
             Mock New-Item { return $null }
-            Mock Join-Path { param($Path, $ChildPath) if ($Path.EndsWith("\")) { return "$Path$ChildPath" } return "$Path\$ChildPath" }
+            Mock Join-Path { 
+                param($Path, $ChildPath)
+                if ([string]::IsNullOrWhiteSpace($Path)) { return $ChildPath }
+                if ($Path.EndsWith("\")) { return "$Path$ChildPath" }
+                return "$Path\$ChildPath"
+            }
             Mock Get-VolumeRoot { return "D:\" }
             Mock Test-BackupPrerequisites { return $true }
             Mock Start-Sleep { }
@@ -120,6 +127,7 @@ Describe "Snapshot Backup Script - Extended Tests" {
             Mock New-ShadowCopy { return [PSCustomObject]@{ ID = "{ID-D}"; DeviceObject = "\\?\GLOBALROOT\Device\VSS_D" } }
             Mock Remove-ShadowCopy { }
             Mock Get-Configuration { return $Config }
+            Mock cmd.exe { }
             Mock Get-BackupItems {
                 return ,@([PSCustomObject]@{ Name = "workdirs"; SourceSubPath = "\\?\GLOBALROOT\Device\VSS_D\tuanlee\snapshot_backup_script\workdirs\"; IsRootMode = $true })
             }
@@ -144,6 +152,7 @@ Describe "Snapshot Backup Script - Extended Tests" {
             Mock New-Item { return $null }
             Mock Join-Path { 
                 param($Path, $ChildPath)
+                if ([string]::IsNullOrWhiteSpace($Path)) { return $ChildPath }
                 if ($Path.EndsWith("\")) { return "$Path$ChildPath" }
                 return "$Path\$ChildPath"
             }
@@ -380,6 +389,61 @@ Describe "Snapshot Backup Script - Extended Tests" {
             
             $Result | Should Be "\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy1\workdirs\ADM"
             $Result.EndsWith("\") | Should Be $false
+        }
+    }
+
+    Context "VSS Junction Workflow" {
+        It "Should create, use, and cleanup directory junctions for VSS access" {
+            $script:JunctionCreated = $false
+            $script:JunctionRemoved = $false
+            $script:RobocopySource = ""
+
+            Mock Invoke-RobocopyBackup { 
+                param($Source) $script:RobocopySource = $Source; 
+                return @{ Status = "Success"; ExitCode = 0; LogFile = "test.log" } 
+            }
+            # Mock cmd.exe for mklink and rd
+            Mock cmd.exe { 
+                param($Param1, $Param2, $Param3, $Param4)
+                $all = "$Param1 $Param2 $Param3 $Param4"
+                if ($all -match "mklink /j") { $script:JunctionCreated = $true }
+                if ($all -match "rd /q") { $script:JunctionRemoved = $true }
+            }
+            Mock Test-Path { return $true }
+            Mock New-Item { return $null }
+            Mock Get-VolumeRoot { return "D:\" }
+            Mock Test-BackupPrerequisites { return $true }
+            Mock Start-Sleep { }
+            Mock Resolve-Path { return [PSCustomObject]@{ Path = $Path } }
+            
+            $Config = @{
+                SourcePaths = @("D:\Data")
+                DestinationPath = "D:\Backups"
+                UseVSS = $true
+                HistoryLogFile = "history.log"
+                RetentionDays = 1
+            }
+            Mock Get-Configuration { return $Config }
+            Mock New-ShadowCopy { return [PSCustomObject]@{ ID = "{VSS-123}"; DeviceObject = "\\?\GLOBALROOT\Device\VSS1" } }
+            Mock Remove-ShadowCopy { }
+            Mock Write-BackupHistory { }
+            Mock Clean-OldBackups { }
+
+            # Mock Get-BackupItems to use the junction-based VssSourceRoot
+            Mock Get-BackupItems {
+                param($SourcePath, $VssSourceRoot, $BackupMode)
+                return ,@([PSCustomObject]@{ Name = "Data"; SourceSubPath = $VssSourceRoot; IsRootMode = $true })
+            }
+
+            Start-BackupProcess -ConfigFilePath "dummy.json"
+
+            # Verify Junction Lifecycle
+            $script:JunctionCreated | Should Be $true
+            $script:JunctionRemoved | Should Be $true
+            
+            # Verify Robocopy used the junction path, not the device path
+            $script:RobocopySource | Should Not Match "^\\\\\\\?\\\GLOBALROOT"
+            $script:RobocopySource | Should Match "VssJunction_VSS-123"
         }
     }
 

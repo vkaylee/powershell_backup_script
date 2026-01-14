@@ -310,8 +310,9 @@ Function Invoke-RobocopyBackup {
     $CleanOptions = $Options -replace '/LOG\+?:\S+', '' -replace '\{logpath\}', ''
     
     # Split options into an array, respecting quotes, and filter out protected ones
+    # We do NOT trim quotes here because they might be needed for paths with spaces.
     $OptionArray = [regex]::Matches($CleanOptions, '(?:[^\s"]+|"[^"]*")+') | 
-                   ForEach-Object { $_.Value.Trim('"') } |
+                   ForEach-Object { $_.Value } |
                    Where-Object { $_ -notmatch $ProtectedRegex }
 
     # 4. Execute using Call Operator (&)
@@ -427,7 +428,7 @@ Function Get-BackupItems {
         foreach ($SubDir in $SubDirectories) {
             $ItemsToBackup += [PSCustomObject]@{
                 Name = $SubDir.Name
-                SourceSubPath = "$VssSourceRoot\$($SubDir.Name)"
+                SourceSubPath = Join-Path $VssSourceRoot $SubDir.Name
                 IsRootMode = $false
             }
         }
@@ -594,12 +595,26 @@ Function Start-BackupProcess {
 
                 if ($Snapshot) {
                     $ShadowDevicePath = $Snapshot.DeviceObject
-                    # Construct VSS path. Use exact DeviceObject returned by WMI.
-                    # Robocopy Error 123 often caused by trailing slash on device path before subfolder
-                    if ([string]::IsNullOrWhiteSpace($RelativePath)) {
-                        $VssSourceRoot = $ShadowDevicePath.TrimEnd('\') + "\"
+                    
+                    # DIRECT \\?\GLOBALROOT paths often fail in Robocopy/PowerShell with Error 123.
+                    # FIX: Create a temporary directory junction to the snapshot.
+                    $VssJunctionPath = Join-Path $ScriptDir ("VssJunction_" + $SnapshotID.Replace("{","").Replace("}",""))
+                    if (Test-Path $VssJunctionPath) { cmd.exe /c "rd /q `"$VssJunctionPath`"" }
+                    
+                    $JunctionTarget = $ShadowDevicePath.TrimEnd('\') + "\"
+                    Write-Host "Creating VSS Junction: $VssJunctionPath -> $JunctionTarget" -ForegroundColor Gray
+                    cmd.exe /c "mklink /j `"$VssJunctionPath`" `"$JunctionTarget`" 2>&1" | Out-Null
+                    
+                    if (-not (Test-Path $VssJunctionPath)) {
+                        Write-Error "Failed to create VSS Junction. Robocopy might fail."
+                        $VssSourceRoot = $ShadowDevicePath.TrimEnd('\')
                     } else {
-                        $VssSourceRoot = $ShadowDevicePath.TrimEnd('\') + "\" + $RelativePath.TrimStart('\').TrimEnd('\')
+                        # Map the relative path within the junction
+                        if ([string]::IsNullOrWhiteSpace($RelativePath)) {
+                            $VssSourceRoot = $VssJunctionPath
+                        } else {
+                            $VssSourceRoot = Join-Path $VssJunctionPath ($RelativePath.TrimStart('\'))
+                        }
                     }
                 }
             } else {
@@ -627,6 +642,11 @@ Function Start-BackupProcess {
                 }
 
                 # 5. Remove VSS Snapshot
+                if ($VssJunctionPath -and (Test-Path $VssJunctionPath)) {
+                    Write-Host "Removing VSS Junction: $VssJunctionPath" -ForegroundColor Gray
+                    cmd.exe /c "rd /q `"$VssJunctionPath`""
+                }
+
                 if ($Snapshot) {
                     Remove-ShadowCopy -ShadowID $Snapshot.ID
                 }

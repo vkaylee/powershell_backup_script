@@ -4,7 +4,8 @@ A robust, enterprise-grade PowerShell script for performing daily snapshot backu
 
 ## 🚀 Features
 
-- **VSS Snapshot Integration:** Creates a consistent "point-in-time" snapshot of the source volume before copying, ensuring no file locking issues (requires Administrator privileges).
+- **VSS Snapshot Integration:** Creates a consistent "point-in-time" snapshot of the source volume before copying.
+- **VSS Junction Mapping:** Automatically creates temporary directory junctions to VSS snapshots, ensuring 100% compatibility with Robocopy and resolving common Win32 pathing errors (Error 123/53).
 - **Efficient File Copy:** Uses `Robocopy` for multi-threaded, resume-supported file transfers.
 - **Configurable Throttling:** Built-in support for Robocopy's `/IPG` (Inter-Packet Gap) to prevent network/server overload.
 - **Pre-flight Diagnostics:** Auto-detects missing tools or permissions and aborts to prevent failures. Use `-CheckOnly` to verify environment readiness.
