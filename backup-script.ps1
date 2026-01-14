@@ -289,10 +289,6 @@ Function Invoke-RobocopyBackup {
     # Prepare options
     $FinalOptions = $Options.Replace("{logpath}", "`"$LogFile`"")
     
-    # Ensure Source ends with backslash if it doesn't already, 
-    # particularly important for VSS/GlobalRoot paths to avoid Error 53.
-    if (-not $Source.EndsWith("\")) { $Source += "\" }
-
     if ($InterPacketGapMs -gt 0) {
         $FinalOptions += " /IPG:$InterPacketGapMs"
     }
@@ -528,17 +524,30 @@ Function Start-BackupProcess {
                 continue
             }
 
-            Write-Host "`nProcessing Source: $SourcePath (Mode: $BackupMode)" -ForegroundColor Cyan
-            
-            if (-not (Test-Path $SourcePath)) {
-                Write-Warning "Source path '$SourcePath' does not exist. Skipping."
+            # 1. Resolve to Absolute Path immediately
+            $ResolvedPath = $null
+            try {
+                if (Test-Path $SourcePath) {
+                    $ResolvedPath = (Resolve-Path $SourcePath).Path
+                }
+            } catch { }
+
+            if (-not $ResolvedPath) {
+                Write-Warning "Source path '$SourcePath' does not exist or is inaccessible. Skipping."
                 continue
             }
+            $SourcePath = $ResolvedPath
 
-            $VolumeRoot = Get-VolumeRoot -Path $SourcePath
-            $RelativePath = $SourcePath.Substring($VolumeRoot.Length) # Remove Drive Letter (e.g., "C:\")
+            Write-Host "`nProcessing Source: $SourcePath (Mode: $BackupMode)" -ForegroundColor Cyan
             
-            # 1. Create VSS Snapshot or Use Direct Path
+            $VolumeRoot = Get-VolumeRoot -Path $SourcePath
+            # Calculate relative path from volume root. Handle casing and trailing slashes.
+            $RelativePath = ""
+            if ($SourcePath.Length -gt $VolumeRoot.Length) {
+                $RelativePath = $SourcePath.Substring($VolumeRoot.Length).TrimStart('\')
+            }
+            
+            # 2. Create VSS Snapshot or Use Direct Path
             $Snapshot = $null
             $VssSourceRoot = $null
             
@@ -553,16 +562,13 @@ Function Start-BackupProcess {
                 }
 
                 if ($Snapshot) {
-                    $ShadowDevicePath = $Snapshot.DeviceObject
+                    $ShadowDevicePath = $Snapshot.DeviceObject.TrimEnd('\')
                     # Construct VSS path for the source directory. 
-                    # Ensure it ends with a backslash to satisfy Robocopy's handling of device paths.
                     if ([string]::IsNullOrWhiteSpace($RelativePath)) {
                         $VssSourceRoot = "$ShadowDevicePath\"
                     } else {
                         $VssSourceRoot = "$ShadowDevicePath\$RelativePath"
                     }
-                    
-                    if (-not $VssSourceRoot.EndsWith("\")) { $VssSourceRoot += "\" }
                 }
             } else {
                 Write-Warning "VSS is disabled in configuration. Using direct source path (no snapshot consistency)."

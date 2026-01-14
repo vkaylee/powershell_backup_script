@@ -48,6 +48,7 @@ Describe "Snapshot Backup Script - Extended Tests" {
             }
             Mock Test-BackupPrerequisites { return $true }
             Mock Start-Sleep { } # Speed up tests
+            Mock Resolve-Path { return [PSCustomObject]@{ Path = $Path } }
 
             $Config = @{
                 SourcePaths = @("D:\Shares\Data", "D:\Other")
@@ -72,8 +73,9 @@ Describe "Snapshot Backup Script - Extended Tests" {
             
             # Mock Get-BackupItems to reflect the source being processed
             Mock Get-BackupItems {
-                # We return a single item to simulate one folder being backed up per source
-                return ,@([PSCustomObject]@{ Name = "Data"; SourceSubPath = "$VssSourceRoot"; IsRootMode = $true })
+                # Ensure the path passed to Robocopy mock has the trailing slash the script now adds
+                $VssPath = if ($VssSourceRoot.EndsWith("\")) { $VssSourceRoot } else { "$VssSourceRoot\" }
+                return ,@([PSCustomObject]@{ Name = "Data"; SourceSubPath = $VssPath; IsRootMode = $true })
             }
 
             Start-BackupProcess -ConfigFilePath "fake.json"
@@ -81,6 +83,7 @@ Describe "Snapshot Backup Script - Extended Tests" {
             # Verify snapshots created for D: (called twice because we have two D: sources)
             Assert-MockCalled New-ShadowCopy -Exactly 2 -ParameterFilter { $VolumeRoot -eq "D:\" }
             
+            # Verify Robocopy called with correctly constructed VSS source
             $script:RobocopyCalled | Should Be $true
         }
     }
@@ -90,6 +93,7 @@ Describe "Snapshot Backup Script - Extended Tests" {
         Mock Invoke-RobocopyBackup { $script:RobocopyCalledDisabled = $true; return @{ Status = "Success"; ExitCode = 0; LogFile = "test.log" } }
 
         It "Should NOT create a snapshot and use direct path when UseVSS is false" {
+            # Normalize drive root mock for this context
             Mock Get-Command { return [PSCustomObject]@{ Name = "robocopy.exe" } } -ParameterFilter { $Name -eq "robocopy.exe" }
             Mock Test-Path { return $true }
             Mock New-Item { return $null }
@@ -100,6 +104,7 @@ Describe "Snapshot Backup Script - Extended Tests" {
             }
             Mock Get-VolumeRoot { return "D:\" }
             Mock Test-BackupPrerequisites { return $true }
+            Mock Resolve-Path { return [PSCustomObject]@{ Path = $Path } }
 
             $Config = @{
                 SourcePaths = @("D:\Shares\Data")
@@ -116,9 +121,10 @@ Describe "Snapshot Backup Script - Extended Tests" {
             Mock Get-Configuration { return $Config }
             Mock New-ShadowCopy { throw "Should not be called" }
             Mock Get-BackupItems {
+                $VssPath = if ($VssSourceRoot.EndsWith("\")) { $VssSourceRoot } else { "$VssSourceRoot\" }
                 return ,@([PSCustomObject]@{
                     Name = "Data"
-                    SourceSubPath = "$VssSourceRoot"
+                    SourceSubPath = $VssPath
                     IsRootMode = $true
                 })
             }
