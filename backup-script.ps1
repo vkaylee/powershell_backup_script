@@ -289,6 +289,10 @@ Function Invoke-RobocopyBackup {
     # Prepare options
     $FinalOptions = $Options.Replace("{logpath}", "`"$LogFile`"")
     
+    # Ensure Source ends with backslash if it doesn't already, 
+    # particularly important for VSS/GlobalRoot paths to avoid Error 53.
+    if (-not $Source.EndsWith("\")) { $Source += "\" }
+
     if ($InterPacketGapMs -gt 0) {
         $FinalOptions += " /IPG:$InterPacketGapMs"
     }
@@ -448,7 +452,7 @@ Function Execute-BackupItem {
     Write-Host "  Backing up: $SubDirName" -ForegroundColor White
     
     $BackupResult = Invoke-RobocopyBackup `
-        -Source $SourceSubDirPath `
+        -Source $SourceSubPath `
         -Destination $TargetFullPath `
         -Options $RobocopyOptions `
         -InterPacketGapMs $InterPacketGapMs `
@@ -456,7 +460,7 @@ Function Execute-BackupItem {
     
     $HistoryEntry = @{
         Timestamp = $Timestamp
-        SourcePath = $SourcePath
+        SourcePath = $SourceSubPath # Log the actual VSS path used
         Subdirectory = $SubDirName
         Mode = $BackupMode
         DestinationPath = $TargetFullPath
@@ -541,6 +545,8 @@ Function Start-BackupProcess {
             if ($Config.UseVSS) {
                 try {
                     $Snapshot = New-ShadowCopy -VolumeRoot $VolumeRoot
+                    # Small delay to ensure the device object is ready for access
+                    Start-Sleep -Seconds 2
                 } catch {
                     Write-Error "Skipping $SourcePath due to VSS creation failure."
                     continue
@@ -548,8 +554,15 @@ Function Start-BackupProcess {
 
                 if ($Snapshot) {
                     $ShadowDevicePath = $Snapshot.DeviceObject
-                    # Construct VSS path for the source directory
-                    $VssSourceRoot = "$ShadowDevicePath\$RelativePath" 
+                    # Construct VSS path for the source directory. 
+                    # Ensure it ends with a backslash to satisfy Robocopy's handling of device paths.
+                    if ([string]::IsNullOrWhiteSpace($RelativePath)) {
+                        $VssSourceRoot = "$ShadowDevicePath\"
+                    } else {
+                        $VssSourceRoot = "$ShadowDevicePath\$RelativePath"
+                    }
+                    
+                    if (-not $VssSourceRoot.EndsWith("\")) { $VssSourceRoot += "\" }
                 }
             } else {
                 Write-Warning "VSS is disabled in configuration. Using direct source path (no snapshot consistency)."
