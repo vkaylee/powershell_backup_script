@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file.
 - **Granular Backup Modes:** Added `Root` mode (backup folder as one unit) vs `SubDirectories` mode (backup each subfolder).
 - **Configuration Templates:** Added `config.template.simple.json` and `config.template.advanced.json` with documentation.
 - **Enhanced Testing:** Expanded Pester test suite covering logic, config, and cleanup.
+- **VSS Integration Testing:** Implemented comprehensive mocks for VSS snapshots, ensuring path translation and lifecycle management (creation/deletion) are verified in CI/CD without requiring administrative privileges.
+- **Project-Standard Test Paths:** Tests now use project-standard drive letters (`D:`, `E:`) and mock the filesystem to ensure compatibility across different environments.
 - **Timestamped History:** Prepend human-readable timestamps to `backup-history.log` entries for better readability.
 
 ### Changed

@@ -47,3 +47,11 @@ Switches used:
 
 - **Throttling:** Use `RobocopyInterPacketGapMs` in config to prevent 100% disk/network saturation during production hours.
 - **Fail-safe:** If `UseVSS` is `false`, the script skips snapshot creation and copies directly from the source.
+
+## Testing Strategy
+
+The script uses **Pester (3.4.0)** for automated unit and integration testing. To ensure tests are reliable and runnable on standard developer machines (without Administrator privileges or specific drive configurations), the following strategy is employed:
+
+- **VSS Mocking:** WMI calls for snapshot creation (`Win32_ShadowCopy`) are mocked to return fake `DeviceObject` paths. This verifies the script's path translation logic and snapshot lifecycle management.
+- **Filesystem Isolation:** Core PowerShell cmdlets like `Join-Path`, `Test-Path`, and `New-Item` are mocked when testing logic that involves non-existent drives (like `E:\` or UNC paths). This allows the test suite to use project-standard paths without dependency on the physical host setup.
+- **External Binary Mocking:** `robocopy.exe` and `Get-Command` are mocked to verify that the script correctly constructs command-line arguments and handles exit codes, without actually executing file copies.

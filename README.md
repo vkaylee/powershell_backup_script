@@ -40,6 +40,16 @@ A robust, enterprise-grade PowerShell script for performing daily snapshot backu
     .\backup-script.ps1 -ConfigFilePath config.jsonc
     ```
 
+## 🧪 Testing
+
+The project includes a comprehensive Pester test suite. To run tests:
+
+```powershell
+Invoke-Pester .\backup-script.Tests.ps1
+```
+
+The tests cover configuration parsing, VSS logic (mocked), Robocopy execution, and retention cleanup.
+
 ## 📂 Documentation
 
 - [User Guide](docs/user-guide.md) - Detailed configuration and scheduling via Task Scheduler.

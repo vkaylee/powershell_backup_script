@@ -6,7 +6,6 @@ Describe "Snapshot Backup Script - Extended Tests" {
     # --- Pre-flight Checks ---
     Context "Test-BackupPrerequisites" {
         It "Should fail if Robocopy is missing" {
-            # Mocking Get-Command to return nothing
             Mock Get-Command { return $null } -ParameterFilter { $Name -eq "robocopy.exe" }
             $Config = @{ UseVSS = $false; DestinationPath = "C:\" }
             $Result = Test-BackupPrerequisites -Config $Config
@@ -14,8 +13,7 @@ Describe "Snapshot Backup Script - Extended Tests" {
         }
 
         It "Should fail if UseVSS is true but user is not Admin" {
-            # Mocking the IsAdmin check isn't direct in the script as it's an inline expression
-            # But we can verify it fails as expected in our test environment
+            Mock Get-Command { return [PSCustomObject]@{ Name = "robocopy.exe" } } -ParameterFilter { $Name -eq "robocopy.exe" }
             $Config = @{ UseVSS = $true; DestinationPath = "C:\" }
             $Result = Test-BackupPrerequisites -Config $Config
             
@@ -25,6 +23,113 @@ Describe "Snapshot Backup Script - Extended Tests" {
                 $Result | Should Be $false
             } else {
                 $Result | Should Be $true
+            }
+        }
+    }
+
+    # --- VSS Workflow Integration ---
+    Context "VSS Workflow Integration - Enabled" {
+        It "Should create snapshots for multiple sources and copy to the correct destination" {
+            Mock Get-Command { return [PSCustomObject]@{ Name = "robocopy.exe" } } -ParameterFilter { $Name -eq "robocopy.exe" }
+            Mock Test-Path { return $true }
+            Mock New-Item { return $null }
+            Mock Join-Path { 
+                param($Path, $ChildPath)
+                if ($Path.EndsWith("\")) { return "$Path$ChildPath" }
+                return "$Path\$ChildPath"
+            }
+            Mock Get-VolumeRoot { 
+                if ($Path -like "D:\*") { return "D:\" }
+                if ($Path -like "E:\*") { return "E:\" }
+                return "D:\"
+            }
+            Mock Test-BackupPrerequisites { return $true }
+
+            $Config = @{
+                SourcePaths = @("D:\Shares\Data", "D:\Other")
+                DestinationPath = "E:\Backups"
+                RetentionDays = 30
+                LogRetentionDays = 90
+                MaxBackupAttempts = 3
+                RobocopyOptions = '/MIR /LOG+:{logpath}'
+                RobocopyInterPacketGapMs = 0
+                HistoryLogFile = "backup-history.log"
+                UseVSS = $true
+            }
+
+            # Mock VSS functions
+            Mock New-ShadowCopy { 
+                return [PSCustomObject]@{ ID = "{ID-D}"; DeviceObject = "\\?\GLOBALROOT\Device\VSS_D" }
+            }
+            Mock Remove-ShadowCopy { }
+            Mock Invoke-RobocopyBackup { return @{ Status = "Success"; ExitCode = 0; LogFile = "test.log" } }
+            Mock Get-Configuration { return $Config }
+            Mock Write-BackupHistory { }
+            Mock Clean-OldBackups { }
+            
+            # Mock Get-BackupItems to reflect the source being processed
+            Mock Get-BackupItems {
+                if ($SourcePath -eq "D:\Shares\Data") {
+                    return ,@([PSCustomObject]@{ Name = "Data"; SourceSubPath = "\\?\GLOBALROOT\Device\VSS_D\Shares\Data"; IsRootMode = $true })
+                }
+                return ,@([PSCustomObject]@{ Name = "Other"; SourceSubPath = "\\?\GLOBALROOT\Device\VSS_D\Other"; IsRootMode = $true })
+            }
+
+            Start-BackupProcess -ConfigFilePath "fake.json"
+
+            # Verify snapshots created for D: (called twice because we have two D: sources)
+            Assert-MockCalled New-ShadowCopy -Exactly 2 -ParameterFilter { $VolumeRoot -eq "D:\" }
+            
+            # Verify Robocopy called with VSS sources AND E: Destination root
+            Assert-MockCalled Invoke-RobocopyBackup -Exactly 1 -ParameterFilter { 
+                $Source -eq "\\?\GLOBALROOT\Device\VSS_D\Shares\Data" -and $Destination -like "E:\Backups\*"
+            }
+        }
+    }
+
+    Context "VSS Workflow Integration - Disabled" {
+        It "Should NOT create a snapshot and use direct path when UseVSS is false" {
+            Mock Get-Command { return [PSCustomObject]@{ Name = "robocopy.exe" } } -ParameterFilter { $Name -eq "robocopy.exe" }
+            Mock Test-Path { return $true }
+            Mock New-Item { return $null }
+            Mock Join-Path { 
+                param($Path, $ChildPath)
+                if ($Path.EndsWith("\")) { return "$Path$ChildPath" }
+                return "$Path\$ChildPath"
+            }
+            Mock Get-VolumeRoot { return "D:\" }
+            Mock Test-BackupPrerequisites { return $true }
+
+            $Config = @{
+                SourcePaths = @("D:\Shares\Data")
+                DestinationPath = "E:\Backups"
+                RetentionDays = 30
+                LogRetentionDays = 90
+                MaxBackupAttempts = 3
+                RobocopyOptions = '/MIR /LOG+:{logpath}'
+                RobocopyInterPacketGapMs = 0
+                HistoryLogFile = "backup-history.log"
+                UseVSS = $false
+            }
+            
+            Mock Get-Configuration { return $Config }
+            Mock New-ShadowCopy { throw "Should not be called" }
+            Mock Invoke-RobocopyBackup { return @{ Status = "Success"; ExitCode = 0; LogFile = "test.log" } }
+            Mock Get-BackupItems {
+                return ,@([PSCustomObject]@{
+                    Name = "Data"
+                    SourceSubPath = "D:\Shares\Data"
+                    IsRootMode = $true
+                })
+            }
+            Mock Write-BackupHistory { }
+            Mock Clean-OldBackups { }
+
+            Start-BackupProcess -ConfigFilePath "fake.json"
+
+            Assert-MockCalled New-ShadowCopy -Exactly 0
+            Assert-MockCalled Invoke-RobocopyBackup -Exactly 1 -ParameterFilter { 
+                $Source -eq "D:\Shares\Data" 
             }
         }
     }
