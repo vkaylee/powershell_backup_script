@@ -25,7 +25,7 @@ The script has been refactored into modular functions to improve maintainability
     *   Wraps `Invoke-RobocopyBackup` with timestamping and logging logic.
     *   Ensures consistent destination folder structure: `DestinationPath\SourceShareName\ItemName_TIMESTAMP`.
 5.  **Logging & Cleanup:**
-    *   `Write-BackupHistory`: Appends structured JSON results to `backup-history.log`.
+    *   `Write-BackupHistory`: Appends results to `backup-history.log`. Each line is prepended with a human-readable timestamp `[YYYY-MM-DD HH:MM:SS]` followed by the JSON execution details.
     *   `Clean-OldBackups`: Enforces retention policies for both data and logs.
 
 ## VSS Snapshot Logic
