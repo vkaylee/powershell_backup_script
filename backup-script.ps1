@@ -286,14 +286,38 @@ Function Invoke-RobocopyBackup {
         [string]$LogFile
     )
 
-    # Prepare options
-    $FinalOptions = $Options.Replace("{logpath}", "`"$LogFile`"")
-    
-    if ($InterPacketGapMs -gt 0) {
-        $FinalOptions += " /IPG:$InterPacketGapMs"
+    # 1. Ensure the directory for the log file exists
+    $LogDir = Split-Path $LogFile -Parent
+    if (-not (Test-Path $LogDir)) {
+        New-Item -Path $LogDir -ItemType Directory -Force | Out-Null
     }
 
-    $CommandArgs = @($Source, $Destination) + $FinalOptions.Split(" ") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    # Build Argument List robustly
+    # We start with Source and Destination
+    if ([string]::IsNullOrWhiteSpace($Source) -or [string]::IsNullOrWhiteSpace($Destination)) {
+        Write-Error "CRITICAL: Robocopy invoked with missing Source or Destination path."
+        return @{ Status = "Failed"; ExitCode = 16; LogFile = $LogFile }
+    }
+    $ArgumentList = @($Source, $Destination)
+
+    # 3. Parse Options string into arguments, but handle the {logpath} placeholder specially
+    # First, replace the placeholder with the actual log path
+    $ProcessedOptions = $Options.Replace("{logpath}", $LogFile)
+    
+    # Simple regex-based splitter that respects quotes would be ideal, 
+    # but since we control the templates, we'll use a safer approach:
+    # Split by space but filter out empty results.
+    $OptionParts = $ProcessedOptions -split ' (?=(?:[^"]*"[^"]*")*[^"]*$)' | Where-Object { [string]::IsNullOrWhiteSpace($_) -eq $false }
+    
+    foreach ($Part in $OptionParts) {
+        # Remove surrounding quotes if they were added in the template (we'll let Start-Process handle quoting)
+        $CleanPart = $Part.Trim('"')
+        $ArgumentList += $CleanPart
+    }
+    
+    if ($InterPacketGapMs -gt 0) {
+        $ArgumentList += "/IPG:$InterPacketGapMs"
+    }
 
     Write-Host "Executing Robocopy..." -ForegroundColor Cyan
     Write-Host "Source: $Source" -ForegroundColor DarkGray
@@ -301,8 +325,8 @@ Function Invoke-RobocopyBackup {
     Write-Host "Log:    $LogFile" -ForegroundColor DarkGray
 
     # Execute Robocopy
-    # We use Start-Process to handle exit codes correctly without throwing exceptions for codes < 8
-    $Process = Start-Process -FilePath "robocopy.exe" -ArgumentList $CommandArgs -Wait -NoNewWindow -PassThru
+    # Passing ArgumentList as an array is the most reliable way to handle spaces in PowerShell
+    $Process = Start-Process -FilePath "robocopy.exe" -ArgumentList $ArgumentList -Wait -NoNewWindow -PassThru
     
     $ExitCode = $Process.ExitCode
     $Status = "Unknown"
@@ -441,6 +465,9 @@ Function Execute-BackupItem {
     
     $TargetDirName = "${SubDirName}_${Timestamp}"
     $TargetFullPath = Join-Path $TargetParentDir $TargetDirName
+    
+    # Ensure LogsDir exists before using it (extra safety)
+    if (-not (Test-Path $LogsDir)) { New-Item -Path $LogsDir -ItemType Directory -Force | Out-Null }
     
     $LogFileName = "${Timestamp}_${SourceFolderName}_${SubDirName}.log"
     $DetailLogPath = Join-Path $LogsDir $LogFileName

@@ -306,6 +306,7 @@ Describe "Snapshot Backup Script - Extended Tests" {
 
     # --- Execution Logic ---
     Context "Execute-BackupItem Logic" {
+        Mock Start-Process { return [PSCustomObject]@{ ExitCode = 0 } }
         $TestDest = Join-Path $PSScriptRoot "TestDest"
         $TestLogs = Join-Path $PSScriptRoot "TestLogs"
         $TestHistory = Join-Path $PSScriptRoot "history.log"
@@ -321,17 +322,17 @@ Describe "Snapshot Backup Script - Extended Tests" {
         It "Should create correct destination folder and execute backup" {
             $Item = [PSCustomObject]@{ 
                 Name = "MySubDir"
-                SourceSubPath = "C:\Source\MySubDir"
+                SourceSubPath = "D:\Source\MySubDir"
                 IsRootMode = $false
             }
             
             # Using /L (List only) to prevent actual copy
             Execute-BackupItem `
                 -Item $Item `
-                -SourcePath "C:\Source" `
+                -SourcePath "D:\Source" `
                 -BackupMode "SubDirectories" `
                 -DestinationRoot $TestDest `
-                -RobocopyOptions "/L" `
+                -RobocopyOptions "/L /LOG+:{logpath}" `
                 -InterPacketGapMs 0 `
                 -LogsDir $TestLogs `
                 -HistoryLogFilePath $TestHistory `
