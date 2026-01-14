@@ -260,4 +260,25 @@ Describe "Snapshot Backup Script - Extended Tests" {
         # Cleanup
         Remove-Item $TestJsoncPath -ErrorAction SilentlyContinue
     }
+
+    # --- Logging Logic ---
+    Context "Write-BackupHistory" {
+        $TestLogPath = Join-Path $PSScriptRoot "history_timestamp_test.log"
+        
+        It "Should prepend a human-readable timestamp to the JSON entry" {
+            Remove-Item $TestLogPath -ErrorAction SilentlyContinue
+            $Entry = [PSCustomObject]@{ Status = "Test"; Id = 123 }
+            
+            Write-BackupHistory -LogFilePath $TestLogPath -Entry $Entry
+            
+            Test-Path $TestLogPath | Should Be $true
+            $Content = (Get-Content $TestLogPath -Raw).Trim()
+            
+            # Format: [YYYY-MM-DD HH:MM:SS] {"Status":"Test","Id":123}
+            $Content | Should Match '^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\] \{.*\}$'
+            $Content | Should Match '"Status":"Test"'
+            
+            Remove-Item $TestLogPath -ErrorAction SilentlyContinue
+        }
+    }
 }

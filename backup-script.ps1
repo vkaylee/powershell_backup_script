@@ -341,7 +341,9 @@ Function Write-BackupHistory {
         [object]$Entry
     )
     $JsonLine = $Entry | ConvertTo-Json -Compress -Depth 10
-    Add-Content -Path $LogFilePath -Value $JsonLine
+    $Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $LogLine = "[$Timestamp] $JsonLine"
+    Add-Content -Path $LogFilePath -Value $LogLine
 }
 
 Function Clean-OldBackups {
