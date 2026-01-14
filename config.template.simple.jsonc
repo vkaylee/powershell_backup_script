@@ -1,0 +1,38 @@
+{
+  // ==========================================
+  // Simple Backup Configuration
+  // ==========================================
+
+  // List of folders to backup. 
+  // You can use local paths (C:\...) or UNC paths (\\Server\Share).
+  "SourcePaths": [
+    "D:\\Shares\\Data",
+    "C:\\Users\\Public\\Documents"
+  ],
+
+  // Where the backups will be stored.
+  // The script will create subfolders for each source.
+  "DestinationPath": "E:\\Backups",
+
+  // Use Volume Shadow Copy Service (VSS) to backup open files.
+  // Requires Administrator privileges. Set to false for testing or non-admin runs.
+  "UseVSS": true,
+
+  // How many days to keep backup folders. Older backups are auto-deleted.
+  "RetentionDays": 30,
+
+  // How many days to keep log files.
+  "LogRetentionDays": 90,
+
+  // Standard Robocopy options:
+  // /MIR : Mirror (copy new/changed, delete extra in dest)
+  // /XD  : Exclude Directories
+  // /XF  : Exclude Files
+  // /R:5 /W:10 : Retry 5 times, wait 10s between retries
+  "RobocopyOptions": "/MIR /XD RECYCLE.BIN \"System Volume Information\" /XF Thumbs.db /R:5 /W:10 /NP /LOG+{logpath}",
+
+  // Slow down the copy to save bandwidth (0 = full speed).
+  "RobocopyInterPacketGapMs": 0,
+
+  "HistoryLogFile": "backup-history.log"
+}

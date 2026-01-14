@@ -1,0 +1,52 @@
+{
+  /* 
+     ADVANCED BACKUP CONFIGURATION
+     Supports Granular Backup Modes and detailed tuning.
+  */
+
+  "SourcePaths": [
+    // MODE: "SubDirectories" (Default)
+    // - Iterates through immediate subfolders of the Path.
+    // - Each subfolder is backed up as a separate item.
+    // - Useful for "Home Drives" or "Department Shares" where you want specific logs for each.
+    {
+      "Path": "D:\\Shares\\Departments",
+      "Mode": "SubDirectories"
+    },
+
+    // MODE: "Root"
+    // - Backs up the Path as a single unit.
+    // - Useful for App Data or when you want the whole folder structure intact as one backup.
+    {
+      "Path": "D:\\Shares\\CriticalApp",
+      "Mode": "Root"
+    }
+  ],
+
+  "DestinationPath": "\\\\NAS\\\\Backups",
+
+  "UseVSS": true, // Enable for open file consistency (Requires Admin)
+
+  // Retention Policy
+  "RetentionDays": 60,       // Keep data backups for 60 days
+  "LogRetentionDays": 180,   // Keep logs longer for auditing
+
+  /* 
+     ROBOCOPY OPTIONS EXPLAINED:
+     /MIR  :: Mirror directory tree (equivalent to /E plus /PURGE).
+     /XD   :: Exclude Directories matching given names/paths.
+     /XF   :: Exclude Files matching given names/paths.
+     /R:n  :: Number of Retries on failed copies.
+     /W:n  :: Wait time between retries.
+     /NP   :: No Progress - prevents log clutter.
+     /LOG+ :: Appends output to the log file defined by script.
+  */
+  "RobocopyOptions": "/MIR /XD RECYCLE.BIN \"System Volume Information\" /XF Thumbs.db /R:5 /W:10 /NP /LOG+{logpath}",
+
+  // Inter-Packet Gap (IPG) in milliseconds.
+  // Use this to throttle bandwidth usage on slow links.
+  // 20ms implies roughly 50-60% bandwidth utilization depending on latency.
+  "RobocopyInterPacketGapMs": 20,
+
+  "HistoryLogFile": "backup-history.log"
+}

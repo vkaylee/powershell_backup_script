@@ -1,0 +1,50 @@
+# PowerShell Snapshot Backup Script
+
+A robust, enterprise-grade PowerShell script for performing daily snapshot backups of Windows SMB shares (or local directories). It leverages **Volume Shadow Copy Service (VSS)** to ensure data consistency for open files and **Robocopy** for efficient, resilient file transfer.
+
+## 🚀 Features
+
+- **VSS Snapshot Integration:** Creates a consistent "point-in-time" snapshot of the source volume before copying, ensuring no file locking issues (requires Administrator privileges).
+- **Efficient File Copy:** Uses `Robocopy` for multi-threaded, resume-supported file transfers.
+- **Configurable Throttling:** Built-in support for Robocopy's `/IPG` (Inter-Packet Gap) to prevent network/server overload.
+- **Timestamped Backups:** Creates isolated backup folders for each run (e.g., `ProjectA_20260114_080000`).
+- **Automated Retention:** Automatically deletes backups and logs older than X days (configurable).
+- **Self-Documenting Configuration:** Supports **C-style comments** (`//` and `/* */`) in the `config.jsonc` file for better documentation.
+- **Detailed History:** Maintains a JSON-based `backup-history.log` and granular logs for each Robocopy operation.
+- **Fail-safe Mode:** Can fallback to direct copying if VSS is disabled/unavailable (configurable).
+
+## 📋 Prerequisites
+
+- **OS:** Windows Server or Windows 10/11.
+- **Permissions:** **Administrator privileges** are required to create VSS Snapshots.
+- **PowerShell:** Windows PowerShell 5.1 or PowerShell Core.
+
+## 🛠️ Quick Start
+
+1.  **Configure:**
+    Edit `config.jsonc` to set your source and destination paths.
+    ```jsonc
+    {
+      // My Source Folders
+      "SourcePaths": ["D:\\Shares\\Data"],
+      "DestinationPath": "\\\\BackupServer\\\\Store",
+      "RetentionDays": 30,
+      "UseVSS": true
+    }
+    ```
+
+2.  **Run:**
+    Open PowerShell as **Administrator** and execute:
+    ```powershell
+    .\backup-script.ps1
+    ```
+
+## 📂 Documentation
+
+- [User Guide](docs/user-guide.md) - Detailed configuration and scheduling via Task Scheduler.
+- [Technical Details](docs/technical-details.md) - How VSS and Robocopy logic works under the hood.
+- [Changelog](CHANGELOG.md) - Recent updates and fixes.
+
+## 📝 License
+
+Internal Use / Open Source.

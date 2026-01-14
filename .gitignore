@@ -1,0 +1,11 @@
+# Configuration
+config.json
+config.jsonc
+
+# Logs and History
+logs/
+backup-history.log
+
+# Backups
+backups/
+workdirs/
