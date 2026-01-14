@@ -41,9 +41,8 @@
      /R:n  :: Number of Retries on failed copies.
      /W:n  :: Wait time between retries.
      /NP   :: No Progress - prevents log clutter.
-     /LOG+ :: Appends output to the log file defined by script.
   */
-  "RobocopyOptions": "/MIR /MT:8 /R:1 /W:1 /J /XD RECYCLE.BIN \"System Volume Information\" /XF Thumbs.db /NP /LOG+{logpath}",
+  "RobocopyOptions": "/MIR /MT:8 /R:1 /W:1 /J /XD RECYCLE.BIN \"System Volume Information\" /XF Thumbs.db /NP",
 
   // Inter-Packet Gap (IPG) in milliseconds.
   // Use this to throttle bandwidth usage on slow links. 0 = Full Speed.

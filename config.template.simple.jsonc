@@ -31,7 +31,7 @@
   // /XD  : Exclude Directories
   // /XF  : Exclude Files
   // /R:1 /W:1 : Retry 1 time, wait 1s between retries
-  "RobocopyOptions": "/MIR /MT:8 /R:1 /W:1 /J /XD RECYCLE.BIN \"System Volume Information\" /XF Thumbs.db /NP /LOG+{logpath}",
+  "RobocopyOptions": "/MIR /MT:8 /R:1 /W:1 /J /XD RECYCLE.BIN \"System Volume Information\" /XF Thumbs.db /NP",
 
   // Slow down the copy to save bandwidth (0 = full speed).
   "RobocopyInterPacketGapMs": 0,
