@@ -304,11 +304,15 @@ Function Invoke-RobocopyBackup {
     $DestArg = $Destination.TrimEnd('\')
 
     # 3. Process Options
-    # Remove any manual LOG switch to prevent conflict
+    # We must exclude options that the script handles internally to prevent conflicts.
+    # Protected: /LOG, /LOG+, /R, /W, /MT
+    $ProtectedRegex = "^/(LOG|LOG\+|R|W|MT)(:.*)?$"
     $CleanOptions = $Options -replace '/LOG\+?:\S+', '' -replace '\{logpath\}', ''
     
-    # Split options into an array, respecting quotes
-    $OptionArray = [regex]::Matches($CleanOptions, '(?:[^\s"]+|"[^"]*")+') | ForEach-Object { $_.Value.Trim('"') }
+    # Split options into an array, respecting quotes, and filter out protected ones
+    $OptionArray = [regex]::Matches($CleanOptions, '(?:[^\s"]+|"[^"]*")+') | 
+                   ForEach-Object { $_.Value.Trim('"') } |
+                   Where-Object { $_ -notmatch $ProtectedRegex }
 
     # 4. Execute using Call Operator (&)
     Write-Host "Executing Robocopy..." -ForegroundColor Cyan
@@ -318,7 +322,11 @@ Function Invoke-RobocopyBackup {
     # Construct the final argument list carefully for Win32 compatibility
     $RobocopyParams = @($SourceArg, $DestArg)
     foreach ($Opt in $OptionArray) { if ($Opt) { $RobocopyParams += $Opt } }
+    
+    # Add mandatory log, throttle, and fail-fast retries
     $RobocopyParams += "/LOG+:$LogFile"
+    $RobocopyParams += "/R:1"
+    $RobocopyParams += "/W:1"
     if ($InterPacketGapMs -gt 0) { $RobocopyParams += "/IPG:$InterPacketGapMs" }
 
     # Execute
@@ -407,7 +415,8 @@ Function Get-BackupItems {
     $ItemsToBackup = @()
     
     if ($BackupMode -eq "Root") {
-        $FolderName = Split-Path $SourcePath -Leaf
+        # Split-Path -Leaf returns empty if path ends with \. Trim it.
+        $FolderName = Split-Path ($SourcePath.TrimEnd('\')) -Leaf
         $ItemsToBackup += [PSCustomObject]@{
             Name = $FolderName
             SourceSubPath = $VssSourceRoot
@@ -423,7 +432,9 @@ Function Get-BackupItems {
             }
         }
     }
-    return $ItemsToBackup
+    # Write-Error "[DEBUG] Get-BackupItems: Returning $($ItemsToBackup.Count) items"
+    # Use unary comma operator to prevent array unrolling when returning single item
+    return ,$ItemsToBackup
 }
 
 Function Execute-BackupItem {
@@ -486,6 +497,9 @@ Function Start-BackupProcess {
         [switch]$CheckOnly
     )
 
+    $ScriptStartTime = Get-Date
+    Write-Host "Backup process started at $($ScriptStartTime.ToString('HH:mm:ss.fff'))" -ForegroundColor Gray
+
     try {
         # Ensure logs directory exists (skip if CheckOnly, we might not need it yet, but good to check permissions)
         if (-not (Test-Path $LogsDir -PathType Container)) {
@@ -522,6 +536,8 @@ Function Start-BackupProcess {
         
         # --- Main Backup Loop ---
         foreach ($SourceItem in $Config.SourcePaths) {
+            $LoopStartTime = Get-Date
+            Write-Host "Processing Source Item at $($LoopStartTime.ToString('HH:mm:ss.fff'))" -ForegroundColor Gray
             # Normalize Source Item (String vs Object)
             $SourcePath = $null
             $BackupMode = "SubDirectories" # Default
@@ -564,8 +580,11 @@ Function Start-BackupProcess {
             $VssSourceRoot = $null
             
             if ($Config.UseVSS) {
+                Write-Host "Creating VSS Snapshot for volume: $VolumeRoot at $((Get-Date).ToString('HH:mm:ss.fff'))" -ForegroundColor Cyan
                 try {
                     $Snapshot = New-ShadowCopy -VolumeRoot $VolumeRoot
+                    $SnapshotID = $Snapshot.ID
+                    Write-Host "VSS Snapshot created successfully at $((Get-Date).ToString('HH:mm:ss.fff'))" -ForegroundColor Green
                     # Wait for device object stability
                     Start-Sleep -Seconds 2
                 } catch {
@@ -576,10 +595,11 @@ Function Start-BackupProcess {
                 if ($Snapshot) {
                     $ShadowDevicePath = $Snapshot.DeviceObject
                     # Construct VSS path. Use exact DeviceObject returned by WMI.
+                    # Robocopy Error 123 often caused by trailing slash on device path before subfolder
                     if ([string]::IsNullOrWhiteSpace($RelativePath)) {
                         $VssSourceRoot = $ShadowDevicePath.TrimEnd('\') + "\"
                     } else {
-                        $VssSourceRoot = $ShadowDevicePath.TrimEnd('\') + "\" + $RelativePath.TrimStart('\')
+                        $VssSourceRoot = $ShadowDevicePath.TrimEnd('\') + "\" + $RelativePath.TrimStart('\').TrimEnd('\')
                     }
                 }
             } else {
@@ -588,13 +608,13 @@ Function Start-BackupProcess {
             }
 
             if ($VssSourceRoot) {
-                $ItemsToBackup = Get-BackupItems `
-                    -SourcePath $SourcePath `
-                    -VssSourceRoot $VssSourceRoot `
-                    -BackupMode $BackupMode
+            Write-Host "Item discovery started at $((Get-Date).ToString('HH:mm:ss.fff'))" -ForegroundColor Gray
+            $Items = Get-BackupItems -SourcePath $SourcePath -VssSourceRoot $VssSourceRoot -BackupMode $BackupMode
+            Write-Host "Found $($Items.Count) items to backup." -ForegroundColor Gray
 
-                foreach ($Item in $ItemsToBackup) {
-                    Execute-BackupItem `
+            foreach ($Item in $Items) {
+                Write-Host "  Executing backup for $($Item.Name) at $((Get-Date).ToString('HH:mm:ss.fff'))" -ForegroundColor Gray
+                Execute-BackupItem `
                         -Item $Item `
                         -SourcePath $SourcePath `
                         -BackupMode $BackupMode `
@@ -620,11 +640,13 @@ Function Start-BackupProcess {
             -LogsDir $LogsDir `
             -LogRetentionDays $Config.LogRetentionDays
 
-        Write-Host "`nBackup Script Completed." -ForegroundColor Green
-    }
-    catch {
-        Write-Error "An unhandled error occurred during script execution: $($Error[0].Exception.Message)"
-        exit 1
+    } catch {
+        Write-Error "CRITICAL ERROR: $($_.Exception.Message)"
+    } finally {
+        $EndTime = Get-Date
+        $Duration = $EndTime - $ScriptStartTime
+        Write-Host "`nBackup Script Completed at $($EndTime.ToString('HH:mm:ss.fff'))" -ForegroundColor Green
+        Write-Host "Total Duration: $($Duration.TotalSeconds.ToString('F2')) seconds" -ForegroundColor Gray
     }
 }
 

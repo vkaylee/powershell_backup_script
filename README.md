@@ -8,7 +8,8 @@ A robust, enterprise-grade PowerShell script for performing daily snapshot backu
 - **Efficient File Copy:** Uses `Robocopy` for multi-threaded, resume-supported file transfers.
 - **Configurable Throttling:** Built-in support for Robocopy's `/IPG` (Inter-Packet Gap) to prevent network/server overload.
 - **Pre-flight Diagnostics:** Auto-detects missing tools or permissions and aborts to prevent failures. Use `-CheckOnly` to verify environment readiness.
-- **Timestamped Backups:** Creates isolated backup folders for each run (e.g., `ProjectA_20260114_080000`).
+- **High-Resolution Logging:** Outputs detailed progress with millisecond-precision timestamps (`HH:mm:ss.fff`) for precise troubleshooting and performance monitoring.
+- **Timestamped Backups:** Creates isolated backup folders for each run with high-precision (ms) timestamps to ensure uniqueness (e.g., `ProjectA_20260114_080000_123`).
 - **Automated Retention:** Automatically deletes backups and logs older than X days (configurable).
 - **Self-Documenting Configuration:** Supports **C-style comments** (`//` and `/* */`) in the `config.jsonc` file for better documentation.
 - **Detailed History:** Maintains a JSON-based `backup-history.log` and granular logs for each Robocopy operation.

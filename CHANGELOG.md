@@ -11,9 +11,15 @@ All notable changes to this project will be documented in this file.
 - **Default Config Rename:** Default configuration file renamed to `config.jsonc` for better VS Code compatibility.
 - **Granular Backup Modes:** Added `Root` mode (backup folder as one unit) vs `SubDirectories` mode (backup each subfolder).
 - **Configuration Templates:** Added `config.template.simple.json` and `config.template.advanced.json` with documentation.
-- **Enhanced Testing:** Expanded Pester test suite covering logic, config, and cleanup.
+- **Enhanced Testing:** Expanded Pester test suite to 24 tests covering logic, config, and cleanup.
 - **VSS Integration Testing:** Implemented comprehensive mocks for VSS snapshots, ensuring path translation and lifecycle management (creation/deletion) are verified in CI/CD without requiring administrative privileges.
 - **Project-Standard Test Paths:** Tests now use project-standard drive letters (`D:`, `E:`) and mock the filesystem to ensure compatibility across different environments.
+- **High-Precision Timestamps:** Switched to millisecond-precision timestamps (`yyyyMMdd_HHmmss_fff`) for backup folders to prevent data corruption/purging during rapid subfolder backups under `/MIR`.
+- **Reliability Fixes:** Resolved Robocopy Error 16 (parameter parsing), Error 53 (path not found), and Error 123 (invalid syntax) by refactoring argument passing, ensuring mandatory `\\?\` prefixes, and normalizing trailing slashes.
+- **Robust Option Filtering:** Implemented a "Protected Flags" system that strips conflicting user-provided options (`/R`, `/W`, `/MT`, `/LOG`) from the configuration to ensure script stability.
+- **Fail-Fast Enforcement:** Hardcoded `/R:1 /W:1` into core operations to prevent indefinite hangs on inaccessible network or VSS paths.
+- **High-Resolution Logging:** Added detailed diagnostic logging with millisecond-precision timestamps throughout the script for better troubleshooting.
+- **Performance Optimization:** Optimized default Robocopy switches with Multi-threading (`/MT:8`) and Unbuffered I/O (`/J`) for faster 300MB+ transfers.
 - **Timestamped History:** Prepend human-readable timestamps to `backup-history.log` entries for better readability.
 
 ### Changed
@@ -22,7 +28,8 @@ All notable changes to this project will be documented in this file.
 - **Improved Path Resolution:** Script now checks for `config.jsonc` first and falls back to `config.json` if necessary.
 
 ### Fixed
-- Fixed array unrolling issue in `Get-BackupItems` when returning a single item.
+- **Array Unrolling Bug:** Fixed a critical issue where single-item arrays returned by `Get-BackupItems` were being unrolled, causing processing failures.
+- **Discovery Logic Fix:** Resolved an issue where the script would inadvertently backup the current working directory if certain variables were undefined.
 
 ## [1.1.0] - 2026-01-13
 ### Added

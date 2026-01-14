@@ -7,7 +7,12 @@ The script is controlled entirely by `config.jsonc` (formerly `config.json`). Us
 | Setting | Type | Description | Default |
 | :--- | :--- | :--- | :--- |
 | `SourcePaths` | Array | List of directory paths (Strings) OR configuration objects. | `[]` |
-| `DestinationPath` | String | The root directory where backups will be stored. | `E:\Backups` |
+| `RobocopyOptions` | String | Extra flags passed to Robocopy. (See note below). | `/MIR /MT:8...` |
+
+### Robocopy Options & Protected Flags
+While you can customize `RobocopyOptions` (e.g., adding `/XF` to exclude files or `/XD` to exclude directories), certain flags are **Protected** to ensure script reliability:
+*   **Overridden:** `/R`, `/W`, `/MT`, `/LOG`, `/LOG+`.
+*   The script automatically strips these from your configuration and enforces its own safe defaults (`/R:1 /W:1`, `/MT:8`, and internal log management).
 
 ### Comments Support
 The configuration file supports standard C-style comments (`//` for single line, `/* ... */` for blocks). This allows you to document your settings directly in the JSON file.

@@ -23,25 +23,47 @@ The script has been refactored into modular functions to improve maintainability
     *   Translates live paths to VSS snapshot paths (`\\?\GLOBALROOT\Device\...`).
 4.  **Execution Engine (`Execute-BackupItem`):**
     *   Wraps `Invoke-RobocopyBackup` with timestamping and logging logic.
+    *   **Collision Prevention:** Uses high-precision timestamps (`_fff`) to ensure unique destination folders for each item, even when multiple subfolders are processed within the same second.
     *   Ensures consistent destination folder structure: `DestinationPath\SourceShareName\ItemName_TIMESTAMP`.
 5.  **Logging & Cleanup:**
     *   `Write-BackupHistory`: Appends results to `backup-history.log`. Each line is prepended with a human-readable timestamp `[YYYY-MM-DD HH:MM:SS]` followed by the JSON execution details.
-    *   `Clean-OldBackups`: Enforces retention policies for both data and logs.
+    *   **High-Resolution Diagnostic Logging:** The script outputs detailed progress logs with millisecond-precision timestamps (`HH:mm:ss.fff`) to the console, allowing for precise identification of performance bottlenecks or hangs.
+    *   `Clean-OldBackups`: Enforces retention policies for both data and logs. Supports regex-based identification of high-precision timestamp folders.
 
 ## VSS Snapshot Logic
+...
+## Robocopy Integration
+...
+
+### Array Unrolling Management
+A critical fix was implemented in `Get-BackupItems` to handle PowerShell's automatic array unrolling. When returning a single backup item, the script uses the unary comma operator (`,$ItemsToBackup`) to ensure the calling function receives a consistent array object, preventing iteration errors.
 
 1.  Identify the root volume (e.g., `D:\`).
 2.  Create a "ClientAccessible" snapshot via WMI.
 3.  Retrieve the `DeviceObject` (e.g., `\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy1`).
 4.  Map the source relative path onto this device path to access frozen data.
+    *   **Crucial:** The mandatory `\\?\` prefix is preserved to ensure absolute Win32 device path resolution.
 
 ## Robocopy Integration
+
+### Robust Option Filtering
+To prevent user configuration from breaking the script's core logic, `Invoke-RobocopyBackup` implements a filtering layer. Protected flags are automatically stripped from the `RobocopyOptions` string provided in the config file:
+- **Protected:** `/R`, `/W` (Retries), `/MT` (Multi-threading), `/LOG`, `/LOG+` (Logging).
+- **Mandatory:** The script enforces its own values for these flags (`/R:1 /W:1`, `/MT:8`, and timestamped log paths) to guarantee stability and prevent hangs.
+
+### Path Normalization
+Win32 device paths (VSS) are extremely sensitive to syntax. The script ensures:
+1.  **Mandatory Prefix:** `\\?\` is preserved for absolute device resolution.
+2.  **Trailing Slash Logic:** Device paths ending in a subfolder (e.g., `\\?\...\workdirs\ADM`) must **not** have a trailing backslash when quoted, or Robocopy will throw Error 123. The script automatically sanitizes these paths before execution.
 
 Switches used:
 - `/MIR`: Mirror (Copy everything, purge destination).
 - `/DCOPY:DA`: Copy Directory Attributes (timestamps).
 - `/COPY:DAT`: Copy Data, Attributes, Timestamps.
+- `/MT:8`: Multi-threaded copy (8 threads).
+- `/J`: Unbuffered I/O (faster for large/numerous files).
 - `/IPG:n`: (Optional) Inter-Packet Gap for bandwidth throttling.
+- `/R:1 /W:1`: Rapid retry logic to prevent long hangs on inaccessible VSS paths.
 
 ## Performance Tuning
 
