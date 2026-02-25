@@ -320,8 +320,8 @@ Function Invoke-RobocopyBackup {
     # Split options into an array, respecting quotes, and filter out protected ones
     # We do NOT trim quotes here because they might be needed for paths with spaces.
     $OptionArray = [regex]::Matches($CleanOptions, '(?:[^\s"]+|"[^"]*")+') | 
-    ForEach-Object { $_.Value } |
-    Where-Object { $_ -notmatch $ProtectedRegex }
+        ForEach-Object { $_.Value } |
+        Where-Object { $_ -notmatch $ProtectedRegex }
 
     # 4. Execute using Call Operator (&)
     Write-Host "Executing Robocopy..." -ForegroundColor Cyan

@@ -68,7 +68,8 @@ foreach ($File in $ScriptFiles) {
     Write-Host "  Checking: $File" -ForegroundColor Gray
 
     $FormatResults = Invoke-ScriptAnalyzer -Path $FilePath -Settings @{
-        Rules = @{
+        IncludeDefaultRules = $false
+        Rules               = @{
             PSUseConsistentIndentation = @{
                 Enable          = $true
                 IndentationSize = 4
