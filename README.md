@@ -29,8 +29,10 @@ A robust, enterprise-grade PowerShell script for performing daily snapshot backu
     ```jsonc
     {
       // My Source Folders
-      "SourcePaths": ["D:\\Shares\\Data"],
-      "DestinationPath": "\\\\BackupServer\\\\Store",
+      "SourcePaths": [
+        { "Path": "D:\\Shares\\Data", "Mode": "SubDirectories" }
+      ],
+      "DestinationPath": "\\\\BackupServer\\Store",
       "RetentionDays": 30,
       "UseVSS": true
     }

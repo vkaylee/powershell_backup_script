@@ -194,18 +194,16 @@ Function Get-Configuration {
                 try {
                     New-Item -Path $LoadedConfig.DestinationPath -ItemType Directory -Force | Out-Null
                 } catch {
-                    Write-Error "Failed to create destination path '$($LoadedConfig.DestinationPath)'. Error: $($Error[0].Exception.Message). Please ensure it's accessible and you have permissions."
-                    exit 1
+                    throw "Failed to create destination path '$($LoadedConfig.DestinationPath)'. Error: $($_.Exception.Message). Please ensure it's accessible and you have permissions."
                 }
             }
         } else {
-            Write-Error "Configuration Error: DestinationPath is null or empty. Please provide a valid path."
-            exit 1
+            throw "Configuration Error: DestinationPath is null or empty. Please provide a valid path."
         }
         return $LoadedConfig
     }
     catch {
-        Write-Error "Failed to load or parse configuration file '$ConfigPath'. Error: $($Error[0].Exception.Message). Using default configuration."
+        Write-Error "Failed to load or parse configuration file '$ConfigPath'. Error: $($_.Exception.Message). Using default configuration."
         return $DefaultConfig
     }
 }
@@ -324,10 +322,11 @@ Function Invoke-RobocopyBackup {
     $RobocopyParams = @($SourceArg, $DestArg)
     foreach ($Opt in $OptionArray) { if ($Opt) { $RobocopyParams += $Opt } }
     
-    # Add mandatory log, throttle, and fail-fast retries
+    # Add mandatory log, throttle, multi-threading, and fail-fast retries
     $RobocopyParams += "/LOG+:$LogFile"
     $RobocopyParams += "/R:1"
     $RobocopyParams += "/W:1"
+    $RobocopyParams += "/MT:8"
     if ($InterPacketGapMs -gt 0) { $RobocopyParams += "/IPG:$InterPacketGapMs" }
 
     # Execute
@@ -363,7 +362,7 @@ Function Write-BackupHistory {
     Add-Content -Path $LogFilePath -Value $LogLine
 }
 
-Function Clean-OldBackups {
+Function Remove-OldBackups {
     Param (
         [string]$DestinationRoot,
         [int]$RetentionDays,
@@ -438,7 +437,7 @@ Function Get-BackupItems {
     return ,$ItemsToBackup
 }
 
-Function Execute-BackupItem {
+Function Invoke-BackupItem {
     Param (
         $Item,
         $SourcePath,
@@ -547,7 +546,14 @@ Function Start-BackupProcess {
                 $SourcePath = $SourceItem
             } elseif ($null -ne $SourceItem.Path) {
                 $SourcePath = $SourceItem.Path
-                if ($null -ne $SourceItem.Mode) { $BackupMode = $SourceItem.Mode }
+                if ($null -ne $SourceItem.Mode) {
+                    $ValidModes = @("SubDirectories", "Root")
+                    if ($SourceItem.Mode -notin $ValidModes) {
+                        Write-Warning "Invalid Mode '$($SourceItem.Mode)' for source '$($SourceItem.Path)'. Valid modes: $($ValidModes -join ', '). Defaulting to 'SubDirectories'."
+                    } else {
+                        $BackupMode = $SourceItem.Mode
+                    }
+                }
             } else {
                 Write-Warning "Skipping invalid source item format."
                 continue
@@ -623,13 +629,13 @@ Function Start-BackupProcess {
             }
 
             if ($VssSourceRoot) {
-            Write-Host "Item discovery started at $((Get-Date).ToString('HH:mm:ss.fff'))" -ForegroundColor Gray
-            $Items = Get-BackupItems -SourcePath $SourcePath -VssSourceRoot $VssSourceRoot -BackupMode $BackupMode
-            Write-Host "Found $($Items.Count) items to backup." -ForegroundColor Gray
+                Write-Host "Item discovery started at $((Get-Date).ToString('HH:mm:ss.fff'))" -ForegroundColor Gray
+                $Items = Get-BackupItems -SourcePath $SourcePath -VssSourceRoot $VssSourceRoot -BackupMode $BackupMode
+                Write-Host "Found $($Items.Count) items to backup." -ForegroundColor Gray
 
-            foreach ($Item in $Items) {
-                Write-Host "  Executing backup for $($Item.Name) at $((Get-Date).ToString('HH:mm:ss.fff'))" -ForegroundColor Gray
-                Execute-BackupItem `
+                foreach ($Item in $Items) {
+                    Write-Host "  Executing backup for $($Item.Name) at $((Get-Date).ToString('HH:mm:ss.fff'))" -ForegroundColor Gray
+                    Invoke-BackupItem `
                         -Item $Item `
                         -SourcePath $SourcePath `
                         -BackupMode $BackupMode `
@@ -640,21 +646,21 @@ Function Start-BackupProcess {
                         -HistoryLogFilePath $HistoryLogFilePath `
                         -SnapshotID ($Snapshot.ID)
                 }
+            }
 
-                # 5. Remove VSS Snapshot
-                if ($VssJunctionPath -and (Test-Path $VssJunctionPath)) {
-                    Write-Host "Removing VSS Junction: $VssJunctionPath" -ForegroundColor Gray
-                    cmd.exe /c "rd /q `"$VssJunctionPath`""
-                }
+            # 5. Remove VSS Snapshot
+            if ($VssJunctionPath -and (Test-Path $VssJunctionPath)) {
+                Write-Host "Removing VSS Junction: $VssJunctionPath" -ForegroundColor Gray
+                cmd.exe /c "rd /q `"$VssJunctionPath`""
+            }
 
-                if ($Snapshot) {
-                    Remove-ShadowCopy -ShadowID $Snapshot.ID
-                }
+            if ($Snapshot) {
+                Remove-ShadowCopy -ShadowID $Snapshot.ID
             }
         }
 
         # 6. Cleanup
-        Clean-OldBackups `
+        Remove-OldBackups `
             -DestinationRoot $Config.DestinationPath `
             -RetentionDays $Config.RetentionDays `
             -LogsDir $LogsDir `
