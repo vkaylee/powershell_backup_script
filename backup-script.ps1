@@ -39,10 +39,10 @@
 #endregion Script Header
 
 Param (
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [string]$ConfigFilePath,
 
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [switch]$CheckOnly
 )
 
@@ -96,7 +96,7 @@ For full documentation, see: .\docs\user-guide.md
 Function Test-BackupPrerequisites {
     [CmdletBinding()]
     Param (
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [object]$Config
     )
 
@@ -107,7 +107,8 @@ Function Test-BackupPrerequisites {
     if (-not (Get-Command "robocopy.exe" -ErrorAction SilentlyContinue)) {
         Write-Error "CRITICAL: 'robocopy.exe' was not found in the system PATH. This tool is required for backup operations."
         $Passed = $false
-    } else {
+    }
+    else {
         Write-Host "  [OK] Robocopy detected." -ForegroundColor Green
     }
 
@@ -117,16 +118,19 @@ Function Test-BackupPrerequisites {
     if ($Config.UseVSS -and -not $IsAdmin) {
         Write-Error "CRITICAL: Administrator privileges are required when 'UseVSS' is enabled. Please run PowerShell as Administrator."
         $Passed = $false
-    } elseif ($Config.UseVSS) {
+    }
+    elseif ($Config.UseVSS) {
         Write-Host "  [OK] Administrator privileges confirmed for VSS." -ForegroundColor Green
-    } else {
+    }
+    else {
         Write-Host "  [SKIP] VSS is disabled; skipping Administrator check." -ForegroundColor Gray
     }
 
     # 3. Basic Path Validation
     if (-not (Test-Path $Config.DestinationPath)) {
         Write-Warning "DestinationPath '$($Config.DestinationPath)' is currently inaccessible. The script will attempt to create it later, but please verify permissions."
-    } else {
+    }
+    else {
         Write-Host "  [OK] Destination path is accessible." -ForegroundColor Green
     }
 
@@ -136,22 +140,22 @@ Function Test-BackupPrerequisites {
 Function Get-Configuration {
     [CmdletBinding()]
     Param (
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [string]$ConfigPath
     )
 
     Write-Host "Attempting to load configuration from: $ConfigPath" -ForegroundColor Cyan
 
     $DefaultConfig = @{
-        SourcePaths = @("C:\BackupSources\TestShare1", "C:\BackupSources\TestShare2")
-        DestinationPath = (Join-Path $ScriptDir "Backups")
-        RetentionDays = 30
-        LogRetentionDays = 90
-        MaxBackupAttempts = 3
-        RobocopyOptions = '/MIR /MT:8 /R:1 /W:1 /J /XD RECYCLE.BIN "System Volume Information" /XF Thumbs.db /NP /LOG+:{logpath}'
+        SourcePaths              = @("C:\BackupSources\TestShare1", "C:\BackupSources\TestShare2")
+        DestinationPath          = (Join-Path $ScriptDir "Backups")
+        RetentionDays            = 30
+        LogRetentionDays         = 90
+        MaxBackupAttempts        = 3
+        RobocopyOptions          = '/MIR /MT:8 /R:1 /W:1 /J /XD RECYCLE.BIN "System Volume Information" /XF Thumbs.db /NP /LOG+:{logpath}'
         RobocopyInterPacketGapMs = 0
-        HistoryLogFile = "backup-history.log"
-        UseVSS = $true
+        HistoryLogFile           = "backup-history.log"
+        UseVSS                   = $true
     }
 
     if (-not (Test-Path $ConfigPath -PathType Leaf)) {
@@ -189,15 +193,17 @@ Function Get-Configuration {
 
         # Handle DestinationPath validation and creation
         if (-not [string]::IsNullOrEmpty($LoadedConfig.DestinationPath)) {
-             if (-not (Test-Path $LoadedConfig.DestinationPath -PathType Container)) {
+            if (-not (Test-Path $LoadedConfig.DestinationPath -PathType Container)) {
                 Write-Warning "DestinationPath invalid or not found: '$($LoadedConfig.DestinationPath)'. Attempting to create it."
                 try {
                     New-Item -Path $LoadedConfig.DestinationPath -ItemType Directory -Force | Out-Null
-                } catch {
+                }
+                catch {
                     throw "Failed to create destination path '$($LoadedConfig.DestinationPath)'. Error: $($_.Exception.Message). Please ensure it's accessible and you have permissions."
                 }
             }
-        } else {
+        }
+        else {
             throw "Configuration Error: DestinationPath is null or empty. Please provide a valid path."
         }
         return $LoadedConfig
@@ -222,7 +228,7 @@ Function Get-VolumeRoot {
 Function New-ShadowCopy {
     [CmdletBinding()]
     Param (
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [string]$VolumeRoot
     )
 
@@ -238,11 +244,13 @@ Function New-ShadowCopy {
             # Get the Snapshot Object to retrieve the DeviceObject path
             $Snapshot = Get-WmiObject Win32_ShadowCopy | Where-Object { $_.ID -eq $ShadowID }
             return $Snapshot
-        } else {
+        }
+        else {
             Write-Error "Failed to create VSS Snapshot. Return Code: $($Result.ReturnValue)"
             throw "VSS Creation Failed with code $($Result.ReturnValue)"
         }
-    } catch {
+    }
+    catch {
         Write-Error "Error creating VSS Snapshot: $($_.Exception.Message)"
         throw
     }
@@ -251,7 +259,7 @@ Function New-ShadowCopy {
 Function Remove-ShadowCopy {
     [CmdletBinding()]
     Param (
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [string]$ShadowID
     )
 
@@ -261,10 +269,12 @@ Function Remove-ShadowCopy {
         if ($Snapshot) {
             $Snapshot.Delete() # Delete() method doesn't return a value in typical WMI usage for this class via PS
             Write-Host "VSS Snapshot removed successfully." -ForegroundColor Green
-        } else {
+        }
+        else {
             Write-Warning "VSS Snapshot with ID $ShadowID not found."
         }
-    } catch {
+    }
+    catch {
         Write-Error "Error removing VSS Snapshot: $($_.Exception.Message)"
         # We don't throw here to ensure backup process cleanup continues if possible
     }
@@ -310,8 +320,8 @@ Function Invoke-RobocopyBackup {
     # Split options into an array, respecting quotes, and filter out protected ones
     # We do NOT trim quotes here because they might be needed for paths with spaces.
     $OptionArray = [regex]::Matches($CleanOptions, '(?:[^\s"]+|"[^"]*")+') | 
-                   ForEach-Object { $_.Value } |
-                   Where-Object { $_ -notmatch $ProtectedRegex }
+    ForEach-Object { $_.Value } |
+    Where-Object { $_ -notmatch $ProtectedRegex }
 
     # 4. Execute using Call Operator (&)
     Write-Host "Executing Robocopy..." -ForegroundColor Cyan
@@ -339,15 +349,16 @@ Function Invoke-RobocopyBackup {
     if ($ExitCode -lt 8) {
         $Status = "Success"
         Write-Host "Robocopy finished successfully (Code $ExitCode)." -ForegroundColor Green
-    } else {
+    }
+    else {
         $Status = "Failed"
         Write-Error "Robocopy failed with exit code $ExitCode."
     }
 
     return @{
-        Status = $Status
+        Status   = $Status
         ExitCode = $ExitCode
-        LogFile = $LogFile
+        LogFile  = $LogFile
     }
 }
 
@@ -418,23 +429,24 @@ Function Get-BackupItems {
         # Split-Path -Leaf returns empty if path ends with \. Trim it.
         $FolderName = Split-Path ($SourcePath.TrimEnd('\')) -Leaf
         $ItemsToBackup += [PSCustomObject]@{
-            Name = $FolderName
+            Name          = $FolderName
             SourceSubPath = $VssSourceRoot
-            IsRootMode = $true
+            IsRootMode    = $true
         }
-    } else {
+    }
+    else {
         $SubDirectories = Get-ChildItem -Path $SourcePath -Directory
         foreach ($SubDir in $SubDirectories) {
             $ItemsToBackup += [PSCustomObject]@{
-                Name = $SubDir.Name
+                Name          = $SubDir.Name
                 SourceSubPath = Join-Path $VssSourceRoot $SubDir.Name
-                IsRootMode = $false
+                IsRootMode    = $false
             }
         }
     }
     # Write-Error "[DEBUG] Get-BackupItems: Returning $($ItemsToBackup.Count) items"
     # Use unary comma operator to prevent array unrolling when returning single item
-    return ,$ItemsToBackup
+    return , $ItemsToBackup
 }
 
 Function Invoke-BackupItem {
@@ -478,15 +490,15 @@ Function Invoke-BackupItem {
         -LogFile $DetailLogPath
     
     $HistoryEntry = @{
-        Timestamp = $Timestamp
-        SourcePath = $SourceSubPath # Log the actual VSS path used
-        Subdirectory = $SubDirName
-        Mode = $BackupMode
+        Timestamp       = $Timestamp
+        SourcePath      = $SourceSubPath # Log the actual VSS path used
+        Subdirectory    = $SubDirName
+        Mode            = $BackupMode
         DestinationPath = $TargetFullPath
-        Status = $BackupResult.Status
-        ExitCode = $BackupResult.ExitCode
-        ShadowCopyId = if ($SnapshotID) { $SnapshotID } else { "N/A" }
-        DetailLogFile = $DetailLogPath
+        Status          = $BackupResult.Status
+        ExitCode        = $BackupResult.ExitCode
+        ShadowCopyId    = if ($SnapshotID) { $SnapshotID } else { "N/A" }
+        DetailLogFile   = $DetailLogPath
     }
     Write-BackupHistory -LogFilePath $HistoryLogFilePath -Entry $HistoryEntry
 }
@@ -516,7 +528,8 @@ Function Start-BackupProcess {
         if ($CheckOnly) {
             if ($CheckResult) {
                 Write-Host "`n[SUCCESS] System is ready for backup." -ForegroundColor Green
-            } else {
+            }
+            else {
                 Write-Host "`n[FAILED] System is NOT ready for backup. Please fix the errors above." -ForegroundColor Red
             }
             return # Exit successfully (diagnostic mode)
@@ -544,17 +557,20 @@ Function Start-BackupProcess {
 
             if ($SourceItem -is [string]) {
                 $SourcePath = $SourceItem
-            } elseif ($null -ne $SourceItem.Path) {
+            }
+            elseif ($null -ne $SourceItem.Path) {
                 $SourcePath = $SourceItem.Path
                 if ($null -ne $SourceItem.Mode) {
                     $ValidModes = @("SubDirectories", "Root")
                     if ($SourceItem.Mode -notin $ValidModes) {
                         Write-Warning "Invalid Mode '$($SourceItem.Mode)' for source '$($SourceItem.Path)'. Valid modes: $($ValidModes -join ', '). Defaulting to 'SubDirectories'."
-                    } else {
+                    }
+                    else {
                         $BackupMode = $SourceItem.Mode
                     }
                 }
-            } else {
+            }
+            else {
                 Write-Warning "Skipping invalid source item format."
                 continue
             }
@@ -565,7 +581,10 @@ Function Start-BackupProcess {
                 if (Test-Path $SourcePath) {
                     $ResolvedPath = (Resolve-Path $SourcePath).Path
                 }
-            } catch { }
+            }
+            catch {
+                Write-Verbose "Path resolution failed for '$SourcePath': $($_.Exception.Message)"
+            }
 
             if (-not $ResolvedPath) {
                 Write-Warning "Source path '$SourcePath' does not exist or is inaccessible. Skipping."
@@ -594,7 +613,8 @@ Function Start-BackupProcess {
                     Write-Host "VSS Snapshot created successfully at $((Get-Date).ToString('HH:mm:ss.fff'))" -ForegroundColor Green
                     # Wait for device object stability
                     Start-Sleep -Seconds 2
-                } catch {
+                }
+                catch {
                     Write-Error "Skipping $SourcePath due to VSS creation failure."
                     continue
                 }
@@ -604,7 +624,7 @@ Function Start-BackupProcess {
                     
                     # DIRECT \\?\GLOBALROOT paths often fail in Robocopy/PowerShell with Error 123.
                     # FIX: Create a temporary directory junction to the snapshot.
-                    $VssJunctionPath = Join-Path $ScriptDir ("VssJunction_" + $SnapshotID.Replace("{","").Replace("}",""))
+                    $VssJunctionPath = Join-Path $ScriptDir ("VssJunction_" + $SnapshotID.Replace("{", "").Replace("}", ""))
                     if (Test-Path $VssJunctionPath) { cmd.exe /c "rd /q `"$VssJunctionPath`"" }
                     
                     $JunctionTarget = $ShadowDevicePath.TrimEnd('\') + "\"
@@ -614,16 +634,19 @@ Function Start-BackupProcess {
                     if (-not (Test-Path $VssJunctionPath)) {
                         Write-Error "Failed to create VSS Junction. Robocopy might fail."
                         $VssSourceRoot = $ShadowDevicePath.TrimEnd('\')
-                    } else {
+                    }
+                    else {
                         # Map the relative path within the junction
                         if ([string]::IsNullOrWhiteSpace($RelativePath)) {
                             $VssSourceRoot = $VssJunctionPath
-                        } else {
+                        }
+                        else {
                             $VssSourceRoot = Join-Path $VssJunctionPath ($RelativePath.TrimStart('\'))
                         }
                     }
                 }
-            } else {
+            }
+            else {
                 Write-Warning "VSS is disabled in configuration. Using direct source path (no snapshot consistency)."
                 $VssSourceRoot = $SourcePath
             }
@@ -666,9 +689,11 @@ Function Start-BackupProcess {
             -LogsDir $LogsDir `
             -LogRetentionDays $Config.LogRetentionDays
 
-    } catch {
+    }
+    catch {
         Write-Error "CRITICAL ERROR: $($_.Exception.Message)"
-    } finally {
+    }
+    finally {
         $EndTime = Get-Date
         $Duration = $EndTime - $ScriptStartTime
         Write-Host "`nBackup Script Completed at $($EndTime.ToString('HH:mm:ss.fff'))" -ForegroundColor Green
