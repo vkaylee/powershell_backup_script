@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+ï»¿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Pre-commit quality gate: lint, format, and test checks.
@@ -15,7 +15,7 @@ Set-Location $ScriptRoot
 $Failed = $false
 
 # ============================================================
-# 1. PSScriptAnalyzer â€?Lint
+# 1. PSScriptAnalyzer éˆ¥?Lint
 # ============================================================
 Write-Host "`n--- [1/3] PSScriptAnalyzer Lint ---" -ForegroundColor Cyan
 
@@ -39,7 +39,7 @@ foreach ($File in $ScriptFiles) {
         "PSAvoidUsingWriteHost"           # Expected in a CLI script
         "PSUseShouldProcessForStateChangingFunctions"  # Not needed for backup script
         "PSUseSingularNouns"              # Intentional: Get-BackupItems, Remove-OldBackups, Test-BackupPrerequisites
-        "PSAvoidUsingWMICmdlet"           # Required for VSS â€?PS 5.1 compatibility
+        "PSAvoidUsingWMICmdlet"           # Required for VSS éˆ¥?PS 5.1 compatibility
         "PSUseBOMForUnicodeEncodedFile"   # UTF-8 without BOM is fine for modern systems
     )
 
@@ -57,7 +57,7 @@ foreach ($File in $ScriptFiles) {
 }
 
 # ============================================================
-# 2. Formatting â€?Brace Style & Indentation
+# 2. Formatting éˆ¥?Brace Style & Indentation
 # ============================================================
 Write-Host "`n--- [2/3] Formatting Checks ---" -ForegroundColor Cyan
 
@@ -67,7 +67,14 @@ foreach ($File in $ScriptFiles) {
 
     Write-Host "  Checking: $File" -ForegroundColor Gray
 
-    $FormatResults = Invoke-ScriptAnalyzer -Path $FilePath -Settings @{
+    $FormatRules = @(
+        "PSUseConsistentIndentation"
+        "PSUseConsistentWhitespace"
+        "PSPlaceOpenBrace"
+        "PSPlaceCloseBrace"
+    )
+
+    $FormatResults = Invoke-ScriptAnalyzer -Path $FilePath -IncludeRule $FormatRules -Settings @{
         IncludeDefaultRules = $false
         Rules               = @{
             PSUseConsistentIndentation = @{
@@ -121,7 +128,7 @@ Write-Host "`n--- [3/3] Pester Tests ---" -ForegroundColor Cyan
 
 $TestFile = Join-Path $ScriptRoot "backup-script.Tests.ps1"
 if (Test-Path $TestFile) {
-    $PesterResult = Invoke-Pester -Path $TestFile -PassThru -Quiet
+    $PesterResult = Invoke-Pester -Path $TestFile -PassThru -Quiet 6>$null 5>$null 4>$null 3>$null 2>$null
 
     if ($PesterResult.FailedCount -gt 0) {
         $Failed = $true
@@ -151,3 +158,4 @@ else {
     Write-Host "=== ALL CHECKS PASSED ===" -ForegroundColor Green
     exit 0
 }
+
