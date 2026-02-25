@@ -15,7 +15,7 @@ Set-Location $ScriptRoot
 $Failed = $false
 
 # ============================================================
-# 1. PSScriptAnalyzer â€” Lint
+# 1. PSScriptAnalyzer â€?Lint
 # ============================================================
 Write-Host "`n--- [1/3] PSScriptAnalyzer Lint ---" -ForegroundColor Cyan
 
@@ -39,7 +39,7 @@ foreach ($File in $ScriptFiles) {
         "PSAvoidUsingWriteHost"           # Expected in a CLI script
         "PSUseShouldProcessForStateChangingFunctions"  # Not needed for backup script
         "PSUseSingularNouns"              # Intentional: Get-BackupItems, Remove-OldBackups, Test-BackupPrerequisites
-        "PSAvoidUsingWMICmdlet"           # Required for VSS â€” PS 5.1 compatibility
+        "PSAvoidUsingWMICmdlet"           # Required for VSS â€?PS 5.1 compatibility
         "PSUseBOMForUnicodeEncodedFile"   # UTF-8 without BOM is fine for modern systems
     )
 
@@ -57,7 +57,7 @@ foreach ($File in $ScriptFiles) {
 }
 
 # ============================================================
-# 2. Formatting â€” Brace Style & Indentation
+# 2. Formatting â€?Brace Style & Indentation
 # ============================================================
 Write-Host "`n--- [2/3] Formatting Checks ---" -ForegroundColor Cyan
 
