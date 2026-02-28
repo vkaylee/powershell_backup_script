@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-02-28
+### Added
+- **Pre-commit Hook Pipeline:** Fully automated hook including PSScriptAnalyzer linting, strict formatting checks, and Pester test execution.
+
+### Changed
+- **Test Suite Expansion:** Expanded test coverage from 25 to 96 comprehensive Pester tests, achieving 100% code path coverage.
+- **VSS Junction Fallback:** Improved robustness of fallback logic when a VSS junction fails to create.
+- **Code Formatting:** Formatted the core script and hook scripts to comply with strict PSScriptAnalyzer indentation and brace rules.
+
+### Fixed
+- **JSONC Parsing:** Fixed edge case failures when parsing JSONC configs with inline comments near URLs or strings.
+- **Empty Destination Handling:** Fixed script logic failing to cleanly abort when DestinationPath is empty.
+- **Console Output Noise:** Suppressed noisy `Write-Warning` and `Write-Error` output streams generated internally during Pester test validation.
+- **Test Width Wrapping:** Fixed multiline width wrapping issues in `Show-Usage` tests interfering with regex matchers.
+
 ## [1.2.0] - 2026-01-14
 ### Added
 - **Usage Guide:** Script now displays a helpful usage guide and examples if executed without any command-line arguments.
